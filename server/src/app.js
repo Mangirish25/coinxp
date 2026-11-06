@@ -5,11 +5,13 @@ import cookieParser from 'cookie-parser';
 import { loadEnv } from './config/env.js';
 import { createHealthRoutes } from './routes/healthRoutes.js';
 import { createAuthRoutes } from './routes/authRoutes.js';
+import { createCategoryRoutes } from './routes/categoryRoutes.js';
+import { createTransactionRoutes } from './routes/transactionRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-export function createApp({ db, config, logger } = {}) {
+export function createApp({ db, config, logger, gamificationHandler } = {}) {
   if (!db) throw new Error('createApp requires a database connection.');
   const env = config ?? loadEnv();
   const app = express();
@@ -20,6 +22,9 @@ export function createApp({ db, config, logger } = {}) {
   app.use(requestLogger(logger));
   app.use('/api', createHealthRoutes(db));
   app.use('/api/auth', createAuthRoutes({ db, env, rateLimits: env.authRateLimits }));
+  const apiOptions = { db, env, logger, eventHandler: gamificationHandler };
+  app.use('/api/categories', createCategoryRoutes(apiOptions));
+  app.use('/api/transactions', createTransactionRoutes(apiOptions));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

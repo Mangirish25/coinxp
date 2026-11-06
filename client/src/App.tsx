@@ -7,6 +7,7 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { TransactionsPage } from './pages/TransactionsPage';
 
 export function App() {
   return (
@@ -29,15 +30,7 @@ export function App() {
                   />
                 }
               />
-              <Route
-                path="transactions"
-                element={
-                  <PlaceholderPage
-                    title="Transactions"
-                    description="Transaction management will be added in a later part."
-                  />
-                }
-              />
+              <Route path="transactions" element={<TransactionsPage />} />
               <Route
                 path="budgets"
                 element={
