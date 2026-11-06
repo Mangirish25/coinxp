@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, Plus, Tag, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { AlertTriangle, Plus, Tag, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../services/api';
 import { budgetApi } from '../services/budgetApi';
@@ -13,10 +13,10 @@ import type {
 } from '../types/budget';
 import type { Category } from '../types/transaction';
 import { formatINR } from '../utils/money';
+import { MonthSelector } from '../components/MonthSelector';
 import {
   budgetPeriodForChoice,
   currentMonthInTimezone,
-  shiftMonth,
   validateBudgetAmount,
 } from './budgetPageUtils';
 
@@ -84,14 +84,6 @@ export function BudgetsPage() {
     [refresh],
   );
 
-  const monthLabel = useMemo(() => {
-    const [year, monthNumber] = month.split('-').map(Number);
-    return new Intl.DateTimeFormat(undefined, {
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'UTC',
-    }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
-  }, [month]);
   const unbudgetedHasSpend = Boolean(status?.unbudgetedSpending.categories.length);
   const budgetedIds = new Set(status?.categories.map((item) => item.categoryId) ?? []);
   const availableCategory = categories.filter((category) => !budgetedIds.has(category.id));
@@ -130,28 +122,7 @@ export function BudgetsPage() {
             Spending is calculated from your non-deleted expense transactions.
           </p>
         </div>
-        <nav
-          aria-label="Budget month selector"
-          className="flex items-center gap-2 rounded-xl border border-black/5 bg-white p-1"
-        >
-          <button
-            aria-label="Previous month"
-            className="rounded-lg p-2 hover:bg-canvas"
-            onClick={() => setMonth(shiftMonth(month, -1))}
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <span aria-live="polite" className="min-w-36 text-center text-sm font-semibold">
-            {monthLabel}
-          </span>
-          <button
-            aria-label="Next month"
-            className="rounded-lg p-2 hover:bg-canvas"
-            onClick={() => setMonth(shiftMonth(month, 1))}
-          >
-            <ArrowRight size={18} />
-          </button>
-        </nav>
+        <MonthSelector month={month} onChange={setMonth} label="Budget month selector" />
       </header>
       {notice && (
         <p role="status" className="mt-4 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800">

@@ -45,6 +45,16 @@ export function calculateSafeDailySpend(budgetPaise, spentPaise, daysRemaining) 
   return Number((BigInt(budgetPaise) - BigInt(spentPaise)) / BigInt(daysRemaining));
 }
 
+export function resolveBudget(rows, scope, categoryId, month) {
+  const candidates = rows.filter(
+    (row) => row.scope === scope && (row.categoryId ?? null) === (categoryId ?? null),
+  );
+  const specific = candidates.find((row) => row.month === month);
+  if (specific) return { ...specific, source: 'month' };
+  const fallback = candidates.find((row) => row.month === null);
+  return fallback ? { ...fallback, source: 'default' } : null;
+}
+
 export function daysInMonth(month) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new TypeError('month must use YYYY-MM format.');
   const [year, monthNumber] = month.split('-').map(Number);

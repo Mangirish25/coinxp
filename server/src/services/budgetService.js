@@ -9,6 +9,7 @@ import {
   calculateMonthProgress,
   calculateSafeDailySpend,
   daysInMonth,
+  resolveBudget,
 } from './budgetCalculator.js';
 import { nowIso, todayInTimezone } from '../utils/dates.js';
 import { formatINR, paiseToRupees } from '../utils/money.js';
@@ -16,14 +17,6 @@ import { httpError } from '../utils/httpError.js';
 
 function monthEnd(month) {
   return `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
-}
-
-function effective(rows, scope, categoryId, month) {
-  const candidates = rows.filter((row) => row.scope === scope && row.categoryId === categoryId);
-  const exact = candidates.find((row) => row.month === month);
-  if (exact) return { ...exact, source: 'month' };
-  const fallback = candidates.find((row) => row.month === null);
-  return fallback ? { ...fallback, source: 'default' } : null;
 }
 
 function scopeMoney(calculated) {
@@ -74,7 +67,7 @@ export function createBudgetService({ db }) {
   }
 
   function resolveDaily(userId, month) {
-    return effective(budgets.listForUser(userId), 'daily_limit', null, month);
+    return resolveBudget(budgets.listForUser(userId), 'daily_limit', null, month);
   }
 
   return {
@@ -170,7 +163,7 @@ export function createBudgetService({ db }) {
       const spendByCategory = new Map(spendRows.map((row) => [row.categoryId, row.spentPaise]));
       const totalSpent = sumSafePaise(spendRows.map((row) => row.spentPaise));
       const configured = budgets.listForUser(userId);
-      const monthly = effective(configured, 'monthly_total', null, month);
+      const monthly = resolveBudget(configured, 'monthly_total', null, month);
       const monthlyCalculated = calculateBudget({
         budgetPaise: monthly?.amountPaise ?? null,
         spentPaise: totalSpent,
@@ -228,7 +221,7 @@ export function createBudgetService({ db }) {
           };
         });
       const unbudgetedPaise = sumSafePaise(unbudgetedRows.map((row) => row.spentPaise));
-      const daily = effective(configured, 'daily_limit', null, month);
+      const daily = resolveBudget(configured, 'daily_limit', null, month);
       const warnings = [];
       const categoryBudgetTotal = effectiveCategoryBudgets.reduce(
         (sum, row) => sum + BigInt(row.amountPaise),

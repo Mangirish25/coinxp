@@ -1,6 +1,6 @@
 # CoinXP
 
-CoinXP is a personal finance web app designed to grow into a habit-building product. The project currently includes the foundation, cookie-based authentication, transaction engine, categories API, and budget management. Dashboard aggregations and gamification behavior remain future work.
+CoinXP is a personal finance web app designed to grow into a habit-building product. It currently includes the project foundation, cookie-based authentication, transaction and category management, budgets, and an on-demand dashboard with analytics and monthly reports. Gamification behavior remains future work.
 
 ## Structure
 
@@ -26,7 +26,7 @@ coinxp/
 
 Request flow is **routes → controllers → services → repositories → db**. Controllers do not execute SQL. Repositories are the only layer where SQL belongs. `app.js` builds the Express app without opening a listener so it can be exercised with Supertest.
 
-Financial operations must never fail because gamification failed. The gamification directory is only a scaffold in this phase; nothing calls it.
+Financial operations must never fail because gamification failed. Transaction events from Part 3 call a guarded placeholder only after commit; Part 5 adds no gamification events or behavior.
 
 Every authenticated endpoint uses `requireAuth`; transaction and audit repository operations also scope reads and writes by the authenticated user ID. Add this guard to every future protected route.
 
@@ -98,7 +98,29 @@ The budget resolution rule lives in `budgetService.js`: for a month and scope (p
 
 `budget_history` is append-only and records set, update, and delete operations. Scope, category, and month are copied into each entry so the audit remains interpretable after a budget row is removed. A delete entry has a null `budget_id`; earlier entries retain it as a historical identifier without a foreign key, avoiding any update to immutable history. SQLite triggers reject direct history updates and deletes.
 
-Part 3 transaction API mutations dispatch a budget invalidation signal; the budget page refreshes status and daily-status after create, update, delete, or restore. This repository's client uses the lightweight fetch/state approach already used in Part 3 rather than adding a second query cache.
+Part 3 transaction API mutations dispatch a budget invalidation signal; the budget page refreshes status and daily-status after create, update, delete, or restore. Dashboard and analytics data use TanStack Query. Transaction create, update, delete, and restore plus budget set, update, and delete invalidate the dashboard and analytics cache keys.
+
+## Dashboard and analytics
+
+The dashboard and analytics endpoints require authentication:
+
+| Method | Endpoint                                            | Behavior                                                                                                                                     |
+| ------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/dashboard/summary?month=YYYY-MM`              | Summary cards, selected-month totals, previous-month comparison, current-day status, recent transactions, top categories, and budget summary |
+| `GET`  | `/api/analytics/category-breakdown?from=&to=&type=` | Category totals and largest-remainder basis-point shares; date range is capped at 366 days                                                   |
+| `GET`  | `/api/analytics/daily-spending?from=&to=`           | Calendar-day totals with zero-filled days and each day's resolved daily limit; range capped at 93 days                                       |
+| `GET`  | `/api/analytics/income-vs-expense?months=6`         | Zero-filled monthly income, expense, and net totals; maximum 12 months                                                                       |
+| `GET`  | `/api/analytics/monthly-report?month=YYYY-MM`       | JSON report with totals, changed categories, top expense entries, notable days, budgets, and tracking consistency                            |
+
+Analytics are derived on demand from non-deleted transactions. SQL performs the sums, counts, and grouping, using `transaction_date` for month, day, and comparison buckets. Dashboard totals reconcile with category breakdowns, daily totals, and monthly report totals for the same dates. The selected dashboard month never changes the Today card. There is no cached or stored aggregate state.
+
+`server/src/services/analyticsCalculator.js` contains framework-free rounding, comparisons, averages, calendar zero-fill, and day selection. Category shares use the largest-remainder method: each category first receives its integer basis-point floor, then remaining basis points are assigned by descending fractional remainder with a stable category-ID tie break. This guarantees category shares sum to exactly 10,000 basis points (100%). Percentages are derived from integer paise and rounded only at output boundaries.
+
+The dashboard summary executes a fixed 11 SQL queries: one initial timezone lookup and three analytics reads, four monthly budget-status lookups, and three daily-status lookups. It does not issue per-category or per-transaction queries. `GamificationSummarySlot` is an empty client placeholder for later XP, level, and streak summaries; this part adds no gamification behavior.
+
+The standalone benchmark is `npm run perf:analytics`. It seeds 20,000 in-memory transactions and times each dashboard/analytics endpoint; it is separate from the normal test suite. On the local run during implementation: summary 40.0 ms, category breakdown 8.5 ms, daily spending 5.4 ms, income vs expense 9.5 ms, and monthly report 15.5 ms. These are single-run local timings, not service-level targets.
+
+`EXPLAIN QUERY PLAN` showed the daily and category range aggregates using the existing `idx_transactions_user_date (user_id, transaction_date)` index, and the all-time owner aggregate uses `idx_transactions_user_deleted (user_id, deleted_at)`. No analytics index migration was needed. The benchmark script prints these plans for re-checking after schema or query changes.
 
 ## Run locally
 

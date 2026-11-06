@@ -5,7 +5,8 @@ import { GuestRoute } from './components/GuestRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
-import { PlaceholderPage } from './pages/PlaceholderPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { MonthlyReportPage } from './pages/MonthlyReportPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { TransactionsPage } from './pages/TransactionsPage';
 import { BudgetsPage } from './pages/BudgetsPage';
@@ -22,15 +23,8 @@ export function App() {
               <Route path="register" element={<RegisterPage />} />
             </Route>
             <Route element={<ProtectedRoute />}>
-              <Route
-                path="dashboard"
-                element={
-                  <PlaceholderPage
-                    title="Dashboard"
-                    description="Your financial overview will take shape in a later part."
-                  />
-                }
-              />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="monthly-report" element={<MonthlyReportPage />} />
               <Route path="transactions" element={<TransactionsPage />} />
               <Route path="budgets" element={<BudgetsPage />} />
             </Route>

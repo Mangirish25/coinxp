@@ -8,6 +8,8 @@ import { createAuthRoutes } from './routes/authRoutes.js';
 import { createCategoryRoutes } from './routes/categoryRoutes.js';
 import { createTransactionRoutes } from './routes/transactionRoutes.js';
 import { createBudgetRoutes } from './routes/budgetRoutes.js';
+import { createDashboardRoutes } from './routes/dashboardRoutes.js';
+import { createAnalyticsRoutes } from './routes/analyticsRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -27,6 +29,8 @@ export function createApp({ db, config, logger, gamificationHandler } = {}) {
   app.use('/api/categories', createCategoryRoutes(apiOptions));
   app.use('/api/transactions', createTransactionRoutes(apiOptions));
   app.use('/api/budgets', createBudgetRoutes(apiOptions));
+  app.use('/api/dashboard', createDashboardRoutes(apiOptions));
+  app.use('/api/analytics', createAnalyticsRoutes(apiOptions));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

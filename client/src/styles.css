@@ -16,3 +16,20 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  body {
+    background: #fff !important;
+  }
+  .report-paper {
+    max-width: none;
+    padding: 0;
+    box-shadow: none;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+}

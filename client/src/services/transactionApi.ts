@@ -1,6 +1,12 @@
 import { apiFetch } from './api';
 import type { AuditEntry, Transaction, TransactionList } from '../types/transaction';
 import { invalidateBudgetStatus } from './budgetInvalidation';
+import { invalidateFinancialSummaries } from './queryClient';
+
+function invalidateTransactions() {
+  invalidateBudgetStatus();
+  invalidateFinancialSummaries();
+}
 
 export const transactionApi = {
   list(params: URLSearchParams) {
@@ -14,7 +20,7 @@ export const transactionApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }).then((result) => {
-      invalidateBudgetStatus();
+      invalidateTransactions();
       return result;
     });
   },
@@ -23,14 +29,14 @@ export const transactionApi = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }).then((result) => {
-      invalidateBudgetStatus();
+      invalidateTransactions();
       return result;
     });
   },
   delete(id: number) {
     return apiFetch<void>(`/api/transactions/${id}`, { method: 'DELETE', body: '{}' }).then(
       (result) => {
-        invalidateBudgetStatus();
+        invalidateTransactions();
         return result;
       },
     );
@@ -40,7 +46,7 @@ export const transactionApi = {
       method: 'POST',
       body: '{}',
     }).then((result) => {
-      invalidateBudgetStatus();
+      invalidateTransactions();
       return result;
     });
   },

@@ -72,6 +72,13 @@ export function TransactionsPage() {
     setSearchText(searchParams.get('q') ?? '');
   }, [searchParams]);
   useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setEditing(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+  useEffect(() => {
     const timer = window.setTimeout(
       () =>
         setSearchParams((prev) => {
