@@ -1,5 +1,6 @@
 import { apiFetch } from './api';
 import type { AuditEntry, Transaction, TransactionList } from '../types/transaction';
+import { invalidateBudgetStatus } from './budgetInvalidation';
 
 export const transactionApi = {
   list(params: URLSearchParams) {
@@ -12,19 +13,36 @@ export const transactionApi = {
     return apiFetch<Transaction>('/api/transactions', {
       method: 'POST',
       body: JSON.stringify(body),
+    }).then((result) => {
+      invalidateBudgetStatus();
+      return result;
     });
   },
   update(id: number, body: unknown) {
     return apiFetch<Transaction>(`/api/transactions/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+    }).then((result) => {
+      invalidateBudgetStatus();
+      return result;
     });
   },
   delete(id: number) {
-    return apiFetch<void>(`/api/transactions/${id}`, { method: 'DELETE', body: '{}' });
+    return apiFetch<void>(`/api/transactions/${id}`, { method: 'DELETE', body: '{}' }).then(
+      (result) => {
+        invalidateBudgetStatus();
+        return result;
+      },
+    );
   },
   restore(id: number) {
-    return apiFetch<Transaction>(`/api/transactions/${id}/restore`, { method: 'POST', body: '{}' });
+    return apiFetch<Transaction>(`/api/transactions/${id}/restore`, {
+      method: 'POST',
+      body: '{}',
+    }).then((result) => {
+      invalidateBudgetStatus();
+      return result;
+    });
   },
   history(id: number) {
     return apiFetch<AuditEntry[]>(`/api/transactions/${id}/history`);

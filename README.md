@@ -1,6 +1,6 @@
 # CoinXP
 
-CoinXP is a personal finance web app designed to grow into a habit-building product. The project currently includes the foundation, cookie-based authentication, transaction engine, and categories API. Budget logic, dashboard aggregations, and gamification behavior remain future work.
+CoinXP is a personal finance web app designed to grow into a habit-building product. The project currently includes the foundation, cookie-based authentication, transaction engine, categories API, and budget management. Dashboard aggregations and gamification behavior remain future work.
 
 ## Structure
 
@@ -54,7 +54,7 @@ Authentication responses contain only the public user fields `id`, `email`, `dis
 - User email is stored lowercase. User-local date handling uses the user's timezone.
 - Gamification values and formulas belong only in `server/src/gamification/rules.config.js` as that subsystem is implemented.
 
-## Transactions and categories
+## Transactions, categories, and budgets
 
 Transaction endpoints (all require the auth cookie):
 
@@ -80,7 +80,25 @@ Custom categories are archived through `deleted_at` rather than hard-deleted bec
 
 Create, update, and delete events are sent to the Part 1 gamification placeholder only after the database transaction commits. Event errors are caught and logged so financial writes remain successful. No XP or streak rules are implemented here; restore and no-op updates emit no event.
 
-All state-changing category and transaction endpoints require `Content-Type: application/json`, using the same SameSite=Lax CSRF mitigation documented above for authentication.
+All state-changing category, transaction, and budget endpoints require `Content-Type: application/json`, using the same SameSite=Lax CSRF mitigation documented above for authentication.
+
+Budget endpoints (authenticated):
+
+| Method   | Endpoint                                    | Behavior                                                         |
+| -------- | ------------------------------------------- | ---------------------------------------------------------------- |
+| `PUT`    | `/api/budgets`                              | Set or update a monthly total, category-monthly, or daily limit  |
+| `GET`    | `/api/budgets?month=YYYY-MM&scope=...`      | List the user's configured budget rows                           |
+| `DELETE` | `/api/budgets/:id`                          | Delete an owned row and append a history entry                   |
+| `GET`    | `/api/budgets/status?month=YYYY-MM`         | Calculate monthly, category, and unbudgeted spending             |
+| `GET`    | `/api/budgets/daily-status?date=YYYY-MM-DD` | Calculate that date's expenses against the effective daily limit |
+
+Budget rows store only configured limits in integer paise. Budget row endpoints accept rupees as a decimal string or number and return both `amountPaise` and a two-decimal `amount` string. Computed status responses return paise plus INR-formatted strings. Spend is always calculated from non-deleted `expense` transactions and their `transaction_date`; income and `created_at` do not affect spending totals. The pure, framework-free `server/src/services/budgetCalculator.js` owns status percentages, thresholds, calendar-day progress, and daily pacing. Warning starts at 80% (configured in `server/src/config/budgetConfig.js`); equality with the limit is `warning`, and spending above it is `exceeded`. A zero limit with zero spend is `on_track`; with positive spend it is `exceeded` and percent is null to avoid division by zero.
+
+The budget resolution rule lives in `budgetService.js`: for a month and scope (plus category, if relevant), use the month-specific row first, then the NULL-month default, otherwise no budget. Deleting an override makes the default effective again. Status percentages are rounded to one decimal using integer paise arithmetic. `daysElapsed` counts completed days; `daysRemaining` includes today. For the current month, `safeDailySpendPaise` is `floor(max(0, monthly budget - spent) / days remaining including today)` and is zero when over budget, no budget exists, or no days remain.
+
+`budget_history` is append-only and records set, update, and delete operations. Scope, category, and month are copied into each entry so the audit remains interpretable after a budget row is removed. A delete entry has a null `budget_id`; earlier entries retain it as a historical identifier without a foreign key, avoiding any update to immutable history. SQLite triggers reject direct history updates and deletes.
+
+Part 3 transaction API mutations dispatch a budget invalidation signal; the budget page refreshes status and daily-status after create, update, delete, or restore. This repository's client uses the lightweight fetch/state approach already used in Part 3 rather than adding a second query cache.
 
 ## Run locally
 

@@ -7,6 +7,7 @@ import { createHealthRoutes } from './routes/healthRoutes.js';
 import { createAuthRoutes } from './routes/authRoutes.js';
 import { createCategoryRoutes } from './routes/categoryRoutes.js';
 import { createTransactionRoutes } from './routes/transactionRoutes.js';
+import { createBudgetRoutes } from './routes/budgetRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -25,6 +26,7 @@ export function createApp({ db, config, logger, gamificationHandler } = {}) {
   const apiOptions = { db, env, logger, eventHandler: gamificationHandler };
   app.use('/api/categories', createCategoryRoutes(apiOptions));
   app.use('/api/transactions', createTransactionRoutes(apiOptions));
+  app.use('/api/budgets', createBudgetRoutes(apiOptions));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

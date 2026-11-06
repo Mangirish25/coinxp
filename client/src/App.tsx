@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { TransactionsPage } from './pages/TransactionsPage';
+import { BudgetsPage } from './pages/BudgetsPage';
 
 export function App() {
   return (
@@ -31,15 +32,7 @@ export function App() {
                 }
               />
               <Route path="transactions" element={<TransactionsPage />} />
-              <Route
-                path="budgets"
-                element={
-                  <PlaceholderPage
-                    title="Budgets"
-                    description="Budget management will be added in a later part."
-                  />
-                }
-              />
+              <Route path="budgets" element={<BudgetsPage />} />
             </Route>
           </Route>
         </Routes>

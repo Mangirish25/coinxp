@@ -125,5 +125,40 @@ export function createTransactionRepository(db) {
         )
         .run(updatedAt, id, userId).changes;
     },
+    sumExpensesByCategory(userId, from, to) {
+      const rows = db
+        .prepare(
+          `SELECT category_id AS categoryId, SUM(amount_paise) AS spentPaise
+        FROM transactions
+        WHERE user_id = ? AND type = 'expense' AND deleted_at IS NULL
+          AND transaction_date >= ? AND transaction_date <= ?
+        GROUP BY category_id`,
+        )
+        .safeIntegers()
+        .all(userId, from, to);
+      return rows.map(({ categoryId, spentPaise }) => ({
+        categoryId: Number(categoryId),
+        spentPaise: safePaiseNumber(spentPaise),
+      }));
+    },
+    getDailySpend(userId, date) {
+      const row = db
+        .prepare(
+          `SELECT COALESCE(SUM(amount_paise), 0) AS spentPaise
+        FROM transactions
+        WHERE user_id = ? AND type = 'expense' AND deleted_at IS NULL
+          AND transaction_date >= ? AND transaction_date <= ?`,
+        )
+        .safeIntegers()
+        .get(userId, date, date);
+      return safePaiseNumber(row.spentPaise);
+    },
   };
+}
+
+function safePaiseNumber(value) {
+  const paise = typeof value === 'bigint' ? value : BigInt(value);
+  if (paise > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new RangeError('Expense total exceeds the safe integer paise range.');
+  return Number(paise);
 }
