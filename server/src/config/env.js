@@ -23,6 +23,9 @@ export function loadEnv(source = process.env) {
   if (!['development', 'test', 'production'].includes(source.NODE_ENV)) {
     throw new Error('NODE_ENV must be development, test, or production.');
   }
+  if (source.NODE_ENV === 'production' && source.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production.');
+  }
   try {
     new URL(source.CLIENT_ORIGIN);
   } catch {
@@ -36,5 +39,6 @@ export function loadEnv(source = process.env) {
       source.DB_PATH === ':memory:' ? ':memory:' : path.resolve(repositoryRoot, source.DB_PATH),
     jwtSecret: source.JWT_SECRET,
     clientOrigin: source.CLIENT_ORIGIN,
+    authRateLimits: undefined,
   };
 }

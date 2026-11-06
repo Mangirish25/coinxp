@@ -18,13 +18,20 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "helmet": "^8.0.0",
-    "better-sqlite3": "^13.0.3"
+    "better-sqlite3": "^13.0.3",
+    "argon2": "^0.45.2",
+    "cookie-parser": "^1.4.7",
+    "express-rate-limit": "^7.5.0",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "eslint": "^9.17.0",
     "globals": "^15.14.0",
     "supertest": "^7.0.0",
-    "vitest": "^2.1.8"
+    "@types/jsonwebtoken": "^9.0.7",
+    "vite": "^6.4.5",
+    "vitest": "^5.1.0"
   }
 }

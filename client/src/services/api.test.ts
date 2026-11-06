@@ -10,18 +10,20 @@ describe('apiFetch', () => {
       vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 })),
     );
     await expect(apiFetch<{ ok: boolean }>('/api/health')).resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/health',
+      expect.objectContaining({ credentials: 'include' }),
+    );
   });
 
   it('normalizes the server error shape', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ error: { code: 'NOPE', message: 'Unavailable' } }), {
-            status: 503,
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: 'NOPE', message: 'Unavailable' } }), {
+          status: 503,
+        }),
+      ),
     );
     await expect(apiFetch('/api/health')).rejects.toMatchObject({
       name: 'ApiError',
