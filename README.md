@@ -1,56 +1,47 @@
-# CoinXP — Project Progress Tracker (Temporary)
+# CoinXP
 
-> Temporary glanceable tracker mapped from the supplied product vision and Phase 1 plan. Check a box when its **Done when** condition is met; add brief evidence or a link in the Notes column. All items start unchecked because no implementation status was provided.
+CoinXP is a personal finance web app foundation designed to grow into a habit-building product. This repository currently contains the Part 1 monorepo skeleton, SQLite schema and migrations, shared utilities, and a minimal full-stack health check. Financial features and authentication are intentionally not implemented yet.
 
-## Roadmap at a glance
+## Structure
 
-| Phase | Focus | Target outcome | Progress |
-|---|---|---|---|
-| [ ] **Phase 1** | Core product + gamification (Parts 1–10 below) | Functional web app: accurate financial tracking, budgets, progression, and rewards | 0 / 10 parts |
-| [ ] **Phase 2** | Commercialization + social features | Production-ready financial platform | Not started |
-| [ ] **Phase 3** | Cloud infrastructure + mobile | Cross-platform ecosystem using a shared backend | Not started |
+```text
+coinxp/
+├── client/src/{components,pages,features,hooks,services,contexts,types}/
+├── server/src/
+│   ├── config/       # environment and constants
+│   ├── controllers/  # HTTP request/response coordination
+│   ├── routes/
+│   ├── middleware/
+│   ├── services/     # application use cases
+│   ├── repositories/ # SQL access
+│   ├── gamification/ # future isolated subsystem scaffold
+│   ├── db/           # connection, migrations, migration runner
+│   ├── utils/
+│   ├── app.js        # testable Express app; does not listen
+│   └── server.js     # process entry point; starts listening
+└── README.md
+```
 
-**Phase 1 sequence:** Parts 1–5 build the finance app; Parts 6–9 add the CoinXP progression system; Part 10 polishes, hardens, and deploys. Animation work may overlap Parts 6–9.
+## Layering rules
 
-## Phase 1 — Core CoinXP
+Request flow is **routes → controllers → services → repositories → db**. Controllers do not execute SQL. Repositories are the only layer where SQL belongs. `app.js` builds the Express app without opening a listener so it can be exercised with Supertest.
 
-| Done | Part | Goal / scope | Done when | Notes |
-|---|---|---|---|---|
-| [ ] | **1. Foundation and architecture** | Client/server monorepo; TypeScript client, Express server, gamification module; env, lint/format, SQLite migrations; schema for users, categories, transactions, budgets. Money in integer paise; ISO dates; separate `transaction_date` and `created_at`. | Client calls server `/health`, and migrations run from scratch. | |
-| [ ] | **2. Authentication** | Registration/login/logout; password hashing; JWT and protected routes; validation, login rate limit; auth context and pages. | User can register, log in, access a protected route, and is rejected without a token. | |
-| [ ] | **3. Transaction engine** | Income/expense CRUD; categories, descriptions, dates; edit audit trail; soft deletes; filterable, paginated history. | Edits/deletes retain audit history, and money calculations pass unit tests without floating-point errors. | |
-| [ ] | **4. Budget management** | Monthly, category, and daily limits; spent/remaining/percent-used calculations; settings page and over-budget status. | Budget status for a day, week, or month is correctly computed from transactions. | |
-| [ ] | **5. Dashboard and analytics** | Balance, income, expenses, remaining budget, daily spend; category and trend charts; recent transactions and monthly report. | Every displayed number reconciles with transaction data. | |
-| [ ] | **6. Gamification core: events, XP, levels** | Durable activity events; XP ledger; configurable levels/rules; discipline-focused XP; idempotency; gamification runs after financial commit. | Transaction event awards the correct XP once, and level-up is detected. | |
-| [ ] | **7. Streaks and streak freeze** | Current-day activity only; local-day boundaries; freeze inventory, auto-use and consecutive-use cap; rollover handling. Backdated transactions do not count. | Tests cover day boundaries, backdating, freezes, and multi-day gaps. | |
-| [ ] | **8. Spending thresholds, penalties, anti-abuse** | Detect edits that push daily spend over limit; ledger deduction, warning and event; distinguish overspending from corrections; prevent duplicate penalties and support reversal on revert. | ₹400 → ₹750 behaves as specified; repeated edits do not stack penalties. | |
-| [ ] | **9. Achievements, rewards, challenges** | Achievement evaluators and unlock history; lean shop (freezes, cosmetics, challenge unlocks); ledger-based redemption; 7-Day Discipline Challenge; profile and activity history. | User can earn XP, redeem a freeze, unlock a badge, and complete a challenge, with each visible in history. | |
-| [ ] | **10. Animation, polish, testing, deployment** | State-based motion; responsive loading/empty/error states; end-to-end critical-flow coverage; security pass; seed/demo data; README and first deployment. | New user completes register → track → earn XP → level up → redeem without broken states. | |
+Financial operations must never fail because gamification failed. The gamification directory is only a scaffold in this phase; nothing calls it.
 
-**Phase 1 progress:** 0 / 10 parts complete
+## Data conventions
 
-## Phase 2 — Commercialization and social features
+- All monetary amounts are integer paise. Do not use floating-point values for money.
+- `transaction_date` is the calendar date the financial activity happened (`YYYY-MM-DD`). `created_at` is the UTC timestamp when the record was entered. They represent different facts and must remain separate.
+- User email is stored lowercase. User-local date handling uses the user's timezone.
+- Gamification values and formulas belong only in `server/src/gamification/rules.config.js` as that subsystem is implemented.
 
-- [ ] Define commercialization and production-readiness scope.
-- [ ] Plan social accountability features.
-- [ ] Deliver the production-ready financial platform.
+## Run locally
 
-## Phase 3 — Cloud and mobile ecosystem
+1. Install Node.js and npm, then run `npm install` from the repository root.
+2. Copy `.env.example` to `.env` and set values for your environment. `JWT_SECRET` is a placeholder for the later authentication phase.
+3. Run `npm run db:migrate` and `npm run db:seed`.
+4. Run `npm run dev` and open <http://localhost:5173>. The landing page reports the API/database health status.
 
-- [ ] Move toward cloud infrastructure and a managed database (PostgreSQL in the proposed direction).
-- [ ] Build a mobile client (React Native + Expo in the proposed direction).
-- [ ] Reuse the same API and financial/gamification logic across web and mobile.
-- [ ] Add production storage, monitoring, and deployment infrastructure.
+Useful commands: `npm test`, `npm run lint`, `npm run format`, `npm run db:migrate`, `npm run db:seed`, and `npm run db:reset` (development only).
 
-## Product and engineering principles
-
-- Financial correctness comes before gamification; gamification failure must not lose a transaction.
-- Keep XP, level formulas, thresholds, and streak rules in one `rules.config` file; do not hardcode tunable values.
-- Make gamification deterministic, idempotent, and auditable.
-- Store money as integer paise; keep transaction date distinct from creation time.
-- Design for expansion, but implement only the current phase's scope.
-- Reward healthier financial habits, not transaction volume or simply spending less.
-
-## Current status
-
-No implementation progress was supplied with the planning notes, so all parts are initially unchecked. Update the checkboxes and Notes as work is completed.
+The Vite development server proxies `/api` to `http://localhost:3001`. Configure the proxy through `VITE_API_PROXY_TARGET` if needed. The client can use `VITE_API_BASE_URL` when calling a separately hosted API.
