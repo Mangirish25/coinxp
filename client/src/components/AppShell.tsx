@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards, Sparkles } from 'lucide-react';
+import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards, Sparkles, Flame } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { GamificationToastHost } from './GamificationToastHost';
 
@@ -10,6 +10,7 @@ const links = [
   { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { to: '/budgets', label: 'Budgets', icon: WalletCards },
   { to: '/xp', label: 'XP', icon: Sparkles },
+  { to: '/streaks', label: 'Streaks', icon: Flame },
 ];
 
 export function AppShell() {

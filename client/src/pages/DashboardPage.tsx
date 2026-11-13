@@ -23,6 +23,7 @@ import { formatINR } from '../utils/money';
 import { MonthSelector } from '../components/MonthSelector';
 import { currentMonthInTimezone } from './budgetPageUtils';
 import { GamificationSummaryCard } from '../components/GamificationSummaryCard';
+import { StreakSummaryCard } from '../components/StreakSummaryCard';
 
 const card = 'rounded-2xl border border-black/5 bg-white p-5 shadow-sm';
 const palette = ['#0f766e', '#2563eb', '#9333ea', '#ea580c', '#be123c', '#475569'];
@@ -260,6 +261,7 @@ export function DashboardPage() {
           )
         ))}
       <GamificationSummaryCard />
+      <StreakSummaryCard />
       {!empty && (
         <div className="grid gap-4 xl:grid-cols-2">
           <section className={card}>

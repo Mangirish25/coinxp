@@ -4,12 +4,12 @@ import { transactionApi } from './transactionApi';
 import { budgetApi } from './budgetApi';
 import { queryClient } from './queryClient';
 
-describe('dashboard, analytics, and gamification query invalidation', () => {
+describe('dashboard, analytics, gamification, and streak query invalidation', () => {
   afterEach(() => {
     queryClient.clear();
     vi.unstubAllGlobals();
   });
-  it('refetches active dashboard, analytics, and gamification queries after transaction and budget mutations', async () => {
+  it('refetches active dashboard, analytics, gamification, and streak queries after financial mutations', async () => {
     let calls = 0;
     let resolveRefresh: () => void = () => {};
     const refreshed = new Promise<void>((resolve) => {
@@ -23,12 +23,21 @@ describe('dashboard, analytics, and gamification query invalidation', () => {
       if (result.isSuccess && calls >= 2) resolveRefresh();
     });
     await observer.refetch();
+    let streakCalls = 0;
+    const streakObserver = new QueryObserver(queryClient, {
+      queryKey: ['streaks', 'summary'],
+      queryFn: async () => ++streakCalls,
+    });
+    const streakUnsubscribe = streakObserver.subscribe(() => undefined);
+    await streakObserver.refetch();
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 1 }) }),
     );
     await transactionApi.create({});
     await refreshed;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(streakCalls).toBeGreaterThanOrEqual(2);
     const analyticsObserver = new QueryObserver(queryClient, {
       queryKey: ['analytics', 'breakdown', 'a', 'b'],
       queryFn: async () => ++calls,
@@ -47,5 +56,6 @@ describe('dashboard, analytics, and gamification query invalidation', () => {
     unsubscribe();
     analyticsUnsubscribe();
     gamificationUnsubscribe();
+    streakUnsubscribe();
   });
 });

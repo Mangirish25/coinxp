@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { apiFetch, setUnauthorizedHandler } from '../services/api';
 import type { PublicUser } from '../types/api';
+import { invalidateFinancialSummaries } from '../services/queryClient';
 
 export interface RegisterInput {
   email: string;
@@ -62,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const changeTimezone = useCallback(async (timezone: string) => {
     const updated = await apiFetch<PublicUser>('/api/auth/timezone', { method: 'PATCH', body: JSON.stringify({ timezone }) });
     setUser(updated);
+    invalidateFinancialSummaries();
     return updated;
   }, []);
 
