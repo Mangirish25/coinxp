@@ -60,6 +60,8 @@ export function computeNext(state, input, config) {
   if (!next.active) { next.lastProcessedKey = day; return { state: next, effects }; }
   if (next.currentLength >= tracking.minRunLengthForFreeze && next.consecutiveFrozen < tracking.freeze.maxConsecutiveFrozen && input.freezeInventory > 0) {
     next.consecutiveFrozen += 1;
+    // STR-007: a freeze protects the run but is not a genuine counted day for comeback recovery.
+    delete next.run.comeback;
     effects.push({ type: 'period', status: 'FROZEN', date: day, runId: next.run.id, reasonCode: 'FREEZE_USED' });
     effects.push({ type: 'freezeUse', date: day, runId: next.run.id });
   } else {

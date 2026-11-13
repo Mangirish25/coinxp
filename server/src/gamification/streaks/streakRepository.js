@@ -21,6 +21,9 @@ export function createStreakRepository(db) {
         restored_from_run_id=?,restored_at_key=?,genuine_days_since_restore=? WHERE id=?`)
         .run(endedKey, endReason, countedDays, lengthOffset, lengthAtEnd, restoredFromRunId, restoredAtKey, genuineDaysSinceRestore, id);
     },
+    updateComeback(id, comebackJson) {
+      db.prepare('UPDATE streak_runs SET comeback_json=? WHERE id=?').run(comebackJson, id);
+    },
     getRun(id) {
       return db.prepare(`SELECT id,user_id AS userId,streak_type AS streakType,started_key AS startedKey,
         ended_key AS endedKey,end_reason AS endReason,counted_days AS countedDays,length_offset AS lengthOffset,

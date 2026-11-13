@@ -9,7 +9,8 @@ import { createTimezoneExemptions } from './exemptions.js';
 const TRACKING = 'TRACKING_DAILY';
 const SECONDARY = ['BUDGET_DAILY', 'CONSISTENCY_WEEKLY', 'BUDGET_MONTHLY'];
 const iso = (clock) => clock.now().toISOString();
-const dateDistance = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
+const dateDistance = (from, to, units) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+  (units.hoursPerDay * units.minutesPerHour * units.secondsPerMinute * units.millisecondsPerSecond));
 
 function initialState(stateRow, run, prior, milestones) {
   const state = initialTrackingState({ milestones, longest: stateRow.longestLength });
@@ -29,7 +30,8 @@ function initialState(stateRow, run, prior, milestones) {
 export function createStreakAdvancer({ db, gameEngine, config = defaultRules, clock = gameEngine.clock }) {
   const streaks = createStreakRepository(db);
   const freezes = createFreezeRepository(db);
-  const exemptions = createTimezoneExemptions(createTimezoneChangeRepository(db));
+  const timezoneChanges = createTimezoneChangeRepository(db);
+  const exemptions = createTimezoneExemptions(timezoneChanges);
   const { settlements, facts } = gameEngine.dependencies;
 
   function publishEffect(userId, effect) {
@@ -42,6 +44,7 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       STREAK_MILESTONE_REACHED: `MILE:${userId}:${effect.milestone}`,
     };
     const payload = { streakType: TRACKING, ...effect };
+    if (effect.event === 'STREAK_BROKEN') payload.comebackEligibleUntil = shiftDate(effect.date, config.streaks.tracking.comeback.maxGapDays);
     return gameEngine.publishStreak(effect.event, userId, payload, keys[effect.event] ?? `${effect.event}:${userId}:${effect.date}`);
   }
 
@@ -66,6 +69,12 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
             periodKey: date, idempotencyKey: `FRZ:USE:${date}`, actor: 'engine', createdAt: iso(clock) });
           const inventoryAfter = freezes.inventoryAsOf(userId, cutoff);
           gameEngine.publishStreak('STREAK_FREEZE_USED', userId, { streakType: TRACKING, date, inventoryAfter }, `FRZUSE:${userId}:${date}`, cutoff);
+          const usedSince = new Date(clock.now().getTime() - config.streaks.antiAbuse.freezeUsedWindowDays * config.units.hoursPerDay *
+            config.units.minutesPerHour * config.units.secondsPerMinute * config.units.millisecondsPerSecond).toISOString();
+          const recentUses = freezes.countUsedSince(userId, usedSince);
+          if (recentUses >= config.streaks.antiAbuse.freezeUsedCount) {
+            gameEngine.dependencies.ledger.flag(userId, 'FREEZE_USED_RAPID', date, { recentUses }, iso(clock));
+          }
         } else if (effect.type === 'freezeGrant') {
           const cutoff = localInstantToUtc(shiftDate(date, config.units.one), config.settlement.cutoffLocalHour, user.timezone);
           const existing = freezes.inventoryAsOf(userId, cutoff);
@@ -93,7 +102,7 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
           lengthOffset: runToSave.lengthOffset, lengthAtEnd: ended ? broken?.lengthAtEnd ?? (runToSave.countedDays + runToSave.lengthOffset) : null,
           restoredFromRunId: runToSave.restoredFromRunId ?? null, restoredAtKey: runToSave.restoredAtKey ?? null,
           genuineDaysSinceRestore: runToSave.genuineDaysSinceRestore ?? 0 });
-        db.prepare('UPDATE streak_runs SET comeback_json=? WHERE id=?').run(runToSave.comeback ? JSON.stringify(runToSave.comeback) : null, runToSave.id);
+        streaks.updateComeback(runToSave.id, runToSave.comeback ? JSON.stringify(runToSave.comeback) : null);
       }
       const nextState = {
         userId, streakType: TRACKING, status: state.active ? 'ACTIVE' : state.status,
@@ -103,7 +112,7 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       };
       streaks.saveState(nextState);
       return nextState;
-    })();
+    }).immediate();
   }
 
   function advanceTracking(userId, user, through) {
@@ -138,7 +147,17 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       const prior = streaks.previousRun(userId, TRACKING);
       const exempt = exemptions.isExempt(userId, date);
       state = transitionDay(userId, date, user, state, { tracked: Boolean(settlement?.details?.xpTracked), exempt,
-        reasonCode: 'TIMEZONE_GAP', freezeInventory: inventory, gapDays: prior?.endedKey ? dateDistance(prior.endedKey, date) : 0 });
+        reasonCode: 'TIMEZONE_GAP', freezeInventory: inventory, gapDays: prior?.endedKey ? dateDistance(prior.endedKey, date, config.units) : config.units.zero });
+      const timezoneSince = new Date(clock.now().getTime() - config.streaks.antiAbuse.timezoneWindowDays * config.units.hoursPerDay *
+        config.units.minutesPerHour * config.units.secondsPerMinute * config.units.millisecondsPerSecond).toISOString();
+      const exemptionCount = timezoneChanges.countSkippedSince(userId, timezoneSince);
+      if (exempt && exemptionCount > config.streaks.antiAbuse.timezoneExemptCount) {
+        gameEngine.dependencies.ledger.flag(userId, 'TZ_EXEMPT_REPEAT', date, { recentExemptions: exemptionCount }, iso(clock));
+      }
+      if (settlement?.details?.noSpendDeclared && facts.countNoSpendSince(userId,
+        shiftDate(date, -(config.streaks.antiAbuse.noSpendWindowDays - config.units.one)), date) >= config.streaks.antiAbuse.noSpendCount) {
+        gameEngine.dependencies.ledger.flag(userId, 'NOSPEND_PATTERN', date, { threshold: config.streaks.antiAbuse.noSpendCount }, iso(clock));
+      }
       if (date === through) break;
       date = shiftDate(date, config.units.one);
     }
@@ -146,8 +165,10 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
   }
 
   function advanceSecondary(userId, through) {
-    const today = gameEngine.localDate(userId, clock.now());
-    const maxHistoryStart = shiftDate(through, -(config.streaks.calendar.maxRangeDays - config.units.one));
+    const progress = gameEngine.dependencies.ledger.progress(userId);
+    const accountStart = progress?.gamificationStartDate ?? facts.user(userId).createdAt.slice(0, config.units.dateLength);
+    const historyStart = shiftDate(through, -(config.streaks.calendar.maxRangeDays - config.units.one));
+    const maxHistoryStart = accountStart > historyStart ? accountStart : historyStart;
     const first = settlements.list(userId, 'day', maxHistoryStart, through);
     const weekStart = weekBounds(weekKey(maxHistoryStart)).start;
     const weeks = settlements.list(userId, 'week', weekKey(weekStart), weekKey(through));
@@ -159,6 +180,7 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       const rows = new Map(mappings[type].map((row) => [row.periodKey, row]));
       const priorState = streaks.ensureState(userId, type, iso(clock));
       let active = priorState.status === 'ACTIVE';
+      let broken = false;
       let current = priorState.currentLength;
       let longest = priorState.longestLength;
       let last = priorState.lastProcessedKey;
@@ -166,23 +188,25 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       for (let date = start; date <= through; date = shiftDate(date, config.units.one)) {
         let key = date;
         let nextDate = shiftDate(date, config.units.one);
-        if (type === 'CONSISTENCY_WEEKLY') { key = weekKey(date); nextDate = shiftDate(weekBounds(key).end, config.units.one); if (key !== weekKey(date)) continue; }
+        if (type === 'CONSISTENCY_WEEKLY') { key = weekKey(date); nextDate = shiftDate(weekBounds(key).end, config.units.one); if (date !== weekBounds(key).start) continue; }
         if (type === 'BUDGET_MONTHLY') { key = monthOf(date); nextDate = shiftDate(`${key}-${String(new Date(Date.UTC(Number(key.slice(0,4)),Number(key.slice(5,7)),0)).getUTCDate()).padStart(2,'0')}`, config.units.one); if (date !== `${key}-01`) continue; }
         if (key <= (last ?? '')) continue;
         const row = rows.get(key);
-        const status = row?.outcome === 'PASS' ? 'COUNTED' : type !== 'BUDGET_DAILY' && row?.reasonCode === 'TOO_FEW_DAYS' ? 'EXEMPT' : 'MISSED';
+        const status = type === 'BUDGET_DAILY' && exemptions.isExempt(userId, date) ? 'EXEMPT' : row?.outcome === 'PASS' ? 'COUNTED' : type !== 'BUDGET_DAILY' && row?.reasonCode === 'TOO_FEW_DAYS' ? 'EXEMPT' : 'MISSED';
+        const wasActive = active;
         const chain = computeChain({ active, current, longest, runId: priorState.currentRunId }, status, key, priorState.currentRunId);
-        const changed = chain.effects[0];
-        if (changed) streaks.insertPeriod({ userId, streakType: type, periodKey: key, status: changed.status, runId: active ? priorState.currentRunId : null,
+        streaks.insertPeriod({ userId, streakType: type, periodKey: key, status, runId: active ? priorState.currentRunId : null,
           reasonCode: status === 'COUNTED' ? 'PERIOD_PASSED' : status === 'EXEMPT' ? 'TOO_FEW_DAYS' : 'PERIOD_FAILED', processedAt: iso(clock) });
         active = chain.state.active; current = chain.state.current; longest = chain.state.longest; last = key;
+        if (status === 'COUNTED') broken = false;
+        else if (status === 'MISSED' && wasActive) broken = true;
         if (nextDate > through) break;
       }
-      if (last) streaks.saveState({ userId, streakType: type, status: active ? 'ACTIVE' : current ? 'BROKEN' : 'NONE', currentRunId: active ? priorState.currentRunId : null,
+      if (last) streaks.saveState({ userId, streakType: type, status: active ? 'ACTIVE' : broken ? 'BROKEN' : priorState.status === 'BROKEN' ? 'BROKEN' : 'NONE', currentRunId: active ? priorState.currentRunId : null,
         currentLength: current, longestLength: longest, lastProcessedKey: last, lastCountedKey: active ? last : priorState.lastCountedKey,
         consecutiveFrozen: 0, updatedAt: iso(clock) });
     }
-    return today;
+    return maxHistoryStart;
   }
 
   function advanceUser(userId) {
@@ -218,7 +242,8 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       secondary: Object.fromEntries(SECONDARY.map((type) => {
         const row = streaks.ensureState(userId, type, iso(clock));
         return [type, { status: row.status, current: row.currentLength, longest: row.longestLength }];
-      })), freezes: { inventory: freezeCount, cap: config.streaks.tracking.freeze.maxHeld }, through };
+      })), freezes: { inventory: freezeCount, cap: config.streaks.tracking.freeze.maxHeld }, through,
+      recentEvents: gameEngine.dependencies.outbox.recentStreakEvents(userId, config.pagination.summaryLedgerCount) };
   }
 
   function calendar(userId, from, to) {
@@ -249,8 +274,27 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       pagination: { page, pageSize, total: rows.length, totalPages: Math.ceil(rows.length / pageSize) } };
   }
 
+  function grantFreeze(userId, { source = 'PURCHASE', idempotencyKey }) {
+    const allowedReasons = new Set(['PURCHASE', 'ADMIN']);
+    if (!allowedReasons.has(source) || typeof idempotencyKey !== 'string' || !idempotencyKey.trim()) {
+      throw new TypeError('grantFreeze requires a supported source and idempotency key.');
+    }
+    const user = facts.user(userId);
+    if (!user) return { granted: false, inventory: 0 };
+    return db.transaction(() => {
+      const now = clock.now();
+      const inventory = freezes.inventoryAsOf(userId, now.toISOString());
+      if (inventory >= config.streaks.tracking.freeze.maxHeld) return { granted: false, inventory };
+      const granted = freezes.insert({ userId, delta: config.streaks.tracking.freeze.starterCount, reason: source,
+        effectiveAt: now.toISOString(), effectiveLocalDate: gameEngine.localDate(userId, now), idempotencyKey: `FRZ:${source}:${userId}:${idempotencyKey}`,
+        actor: source === 'ADMIN' ? 'admin' : 'purchase', createdAt: now.toISOString() });
+      return { granted, inventory: freezes.inventoryAsOf(userId, now.toISOString()) };
+    }).immediate();
+  }
+
   return { advanceUser, summary, calendar, freezeHistory, today: (userId) => gameEngine.localDate(userId, clock.now()),
     maxCalendarDays: () => config.streaks.calendar.maxRangeDays,
+    grantFreeze,
     rules: () => ({ tracking: config.streaks.tracking, secondary: config.streaks.secondary,
       atRisk: config.streaks.atRisk, calendar: config.streaks.calendar }), repositories: { streaks, freezes } };
 }

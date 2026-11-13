@@ -58,6 +58,12 @@ export function createOutboxRepository(db) {
     countEventTypeSince(userId,eventType,since) {
       return db.prepare('SELECT count(*) AS count FROM domain_events WHERE user_id=? AND event_type=? AND occurred_at>=?').get(userId,eventType,since).count;
     },
+    recentStreakEvents(userId, limit) {
+      return db.prepare(`SELECT event_id AS eventId,event_type AS eventType,payload_json AS payloadJson,occurred_at AS occurredAt
+        FROM domain_events WHERE user_id=? AND status='PUBLISHED'
+        AND event_type IN ('STREAK_FREEZE_USED','STREAK_BROKEN','STREAK_MILESTONE_REACHED','STREAK_RESTORED')
+        ORDER BY seq DESC LIMIT ?`).all(userId,limit).map((row)=>({ ...row, data: JSON.parse(row.payloadJson).data })).reverse();
+    },
     markProcessed(seq, now) {
       db.prepare(`UPDATE domain_events SET status='PROCESSED',processed_at=?,last_error=NULL WHERE seq=?`).run(now, seq);
     },

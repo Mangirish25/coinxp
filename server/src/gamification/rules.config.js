@@ -39,6 +39,8 @@ const rulesConfig = Object.freeze({
       comeback: Object.freeze({ enabled: true, minPrevLength: 10, maxGapDays: 3, afterCountedDays: 3, retentionBps: 5000, cooldownGenuineDays: 14 }) }),
     secondary: Object.freeze({ budgetDaily: Object.freeze({ enabled: true }), consistencyWeekly: Object.freeze({ enabled: true }), budgetMonthly: Object.freeze({ enabled: true }) }),
     atRisk: Object.freeze({ localHour: 18 }), calendar: Object.freeze({ maxRangeDays: 366 }),
+    antiAbuse: Object.freeze({ noSpendCount: 8, noSpendWindowDays: 30, timezoneExemptCount: 2, timezoneWindowDays: 90,
+      freezeUsedCount: 2, freezeUsedWindowDays: 7, recomputeHistoryDays: 400 }),
     reminders: Object.freeze({ maxPerDay: 1, windowStartHour: 18, windowEndHour: 21, quietStartHour: 22, quietEndHour: 8, maxNotificationsPerDay: 2 }),
     timezone: Object.freeze({ exemptSkippedDates: true }),
   }),

@@ -13,6 +13,10 @@ export function createGamificationFactsRepository(db) {
       return db.prepare(`SELECT id,local_date AS localDate,completed_at AS completedAt,no_spend_declared AS noSpendDeclared,
         xp_eligible AS xpEligible,summary_json AS summaryJson FROM daily_reviews WHERE user_id=? AND local_date=?`).get(userId,date);
     },
+    countNoSpendSince(userId, fromDate, toDate) {
+      return db.prepare(`SELECT count(*) AS count FROM daily_reviews WHERE user_id=? AND no_spend_declared=1
+        AND local_date>=? AND local_date<=?`).get(userId, fromDate, toDate).count;
+    },
     hasAnyReview(userId) { return db.prepare('SELECT 1 AS yes FROM daily_reviews WHERE user_id=? LIMIT 1').get(userId)!==undefined; },
     hasAnyBudget(userId) { return db.prepare('SELECT 1 AS yes FROM budget_history WHERE user_id=? AND action IN (\'set\',\'update\') LIMIT 1').get(userId)!==undefined; },
     reviewCountWeek(userId, weekStart, beforeDate) {
