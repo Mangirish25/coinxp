@@ -12,7 +12,8 @@ export function computeNext(state, input, config) {
   if (input.tracked) {
     if (!next.active) {
       const prior = next.previousRun;
-      next.run = { id: input.runId, startedKey: day, countedDays: 0, lengthOffset: 0, longest: next.longest };
+      next.run = { id: input.runId, startedKey: day, countedDays: 0, lengthOffset: 0, longest: next.longest,
+        genuineDaysSinceRestore: prior?.genuineDaysSinceRestore ?? tracking.comeback.cooldownGenuineDays };
       next.active = true;
       next.status = 'ACTIVE';
       if (prior && input.gapDays <= tracking.comeback.maxGapDays && prior.length >= tracking.comeback.minPrevLength && prior.genuineDaysSinceRestore >= tracking.comeback.cooldownGenuineDays) {
@@ -23,6 +24,7 @@ export function computeNext(state, input, config) {
       effects.push({ type: 'event', event: 'STREAK_STARTED', date: day, runId: next.run.id });
     }
     next.run.countedDays += 1;
+    if (next.run.restoredAtKey && day > next.run.restoredAtKey) next.run.genuineDaysSinceRestore += 1;
     next.consecutiveFrozen = 0;
     if (next.run.comeback?.remainingDays) {
       next.run.comeback.remainingDays -= 1;
@@ -61,7 +63,7 @@ export function computeNext(state, input, config) {
     effects.push({ type: 'freezeUse', date: day, runId: next.run.id });
   } else {
     effects.push({ type: 'period', status: 'MISSED', date: day, runId: next.run.id, reasonCode: 'UNTRACKED' });
-    next.previousRun = { id: next.run.id, length: next.currentLength, endedKey: day, wasRestored: Boolean(next.run.restoredFromRunId), genuineDaysSinceRestore: next.run.restoredFromRunId ? next.run.countedDays - (next.run.countedDays - next.run.countedDays) : tracking.comeback.cooldownGenuineDays };
+        next.previousRun = { id: next.run.id, length: next.currentLength, endedKey: day, wasRestored: Boolean(next.run.restoredFromRunId), genuineDaysSinceRestore: next.run.genuineDaysSinceRestore };
     effects.push({ type: 'event', event: 'STREAK_BROKEN', date: day, runId: next.run.id, lengthAtEnd: next.currentLength });
     next.active = false;
     next.status = 'BROKEN';

@@ -244,9 +244,10 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     else if(noSpend&&!reviews?.xpEligible){reasonCode='NO_SPEND_CAP';}
     else if(config.guards.limitRealism.enabled&&baseline!==null&&BigInt(limit.amountPaise)>BigInt(config.guards.limitRealism.factor)*BigInt(baseline)){reasonCode='LIMIT_NOT_MEANINGFUL';}
     else if(xpTracked){outcome=expensePaise<=limit.amountPaise?'PASS':'FAIL';reasonCode=outcome==='PASS'?'DAILY_ADHERENCE':'LIMIT_EXCEEDED';}
-    const details={limitPaise:limit?.amountPaise??null,limitSource:limit?.source??null,expensePaise,liveCount,tracked,xpTracked,noSpend,xpEligible:reviews?.xpEligible===1,baselinePaise:baseline,cutoffAt:cutoff,requiredTracked:null};
+    const noSpendDeclared=Boolean(reviews?.noSpendDeclared);
+    const details={limitPaise:limit?.amountPaise??null,limitSource:limit?.source??null,expensePaise,liveCount,tracked,xpTracked,noSpend,noSpendDeclared,xpEligible:reviews?.xpEligible===1,baselinePaise:baseline,cutoffAt:cutoff,requiredTracked:null};
     const inserted=settlements.insert({userId,periodType:'day',periodKey:date,outcome,reasonCode,details,settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
-    if(inserted){publish('DAY_SETTLED',userId,{periodType:'day',periodKey:date,outcome,tracked:xpTracked},`DAY_SETTLED:${userId}:${date}`);}
+    if(inserted){publish('DAY_SETTLED',userId,{periodType:'day',periodKey:date,outcome,tracked:xpTracked,xpTracked,noSpendDeclared},`DAY_SETTLED:${userId}:${date}`);}
     if(outcome==='PASS')return reconcileKey({userId,key:`XP-003:${date}`,ruleId:'XP-003',periodType:'day',periodKey:date,desired:true,reasonCode:'DAILY_ADHERENCE',sourceEventId:null,note:String(limit.amountPaise)});
     return null;
   }
