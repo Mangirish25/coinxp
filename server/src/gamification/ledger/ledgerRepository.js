@@ -23,6 +23,17 @@ export function createLedgerRepository(db) {
         WHERE user_id=? AND entitlement_key=? AND entry_type IN ('AWARD','REINSTATE') ORDER BY transition_no DESC LIMIT 1`)
         .safeIntegers().get(userId,key), ['id','lifetimeDelta','balanceDelta']);
     },
+    clawbackCandidates(userId,entryIds) {
+      if (!entryIds.length) return [];
+      const placeholders=entryIds.map(()=>'?').join(',');
+      return db.prepare(`SELECT l.id,l.entitlement_key AS entitlementKey,l.lifetime_delta AS lifetimeDelta,l.balance_delta AS balanceDelta,
+        l.period_type AS periodType,l.period_key AS periodKey,l.config_version AS configVersion,l.created_at AS createdAt
+        FROM xp_ledger l WHERE l.user_id=? AND l.id IN (${placeholders}) AND l.entry_type IN ('AWARD','REINSTATE')
+          AND l.lifetime_delta>0 AND l.entitlement_key IS NOT NULL
+          AND l.id=(SELECT MAX(latest.id) FROM xp_ledger latest WHERE latest.user_id=l.user_id AND latest.entitlement_key=l.entitlement_key)
+          AND NOT EXISTS(SELECT 1 FROM entitlement_locks k WHERE k.user_id=l.user_id AND k.entitlement_key=l.entitlement_key)
+        ORDER BY l.id`).safeIntegers().all(userId,...entryIds).map((row)=>numeric(row,['id','lifetimeDelta','balanceDelta']));
+    },
     latestForKey(userId, key) {
       return numeric(db.prepare(`SELECT id,user_id AS userId,entry_type AS entryType,rule_id AS ruleId,entitlement_key AS entitlementKey,
         transition_no AS transitionNo,idempotency_key AS idempotencyKey,lifetime_delta AS lifetimeDelta,balance_delta AS balanceDelta,
@@ -105,8 +116,8 @@ export function createLedgerRepository(db) {
       const row=db.prepare(`SELECT 1 AS yes FROM gamification_flags WHERE user_id=? AND code='KEY_LOCKED' AND instr(details_json,?)>0 LIMIT 1`).get(userId,key);
       return row!==undefined;
     },
-    lockEntitlement(userId,key,reason,now) {
-      return db.prepare(`INSERT OR IGNORE INTO entitlement_locks(user_id,entitlement_key,reason,created_at) VALUES(?,?,?,?)`).run(userId,key,reason,now).changes > 0;
+    lockEntitlement(userId,key,reason,now,caseId=null) {
+      return db.prepare(`INSERT OR IGNORE INTO entitlement_locks(user_id,entitlement_key,reason,created_at,case_id) VALUES(?,?,?,?,?)`).run(userId,key,reason,now,caseId).changes > 0;
     },
     recentFlagCount(userId,code,since) { return db.prepare(`SELECT count(*) AS count FROM gamification_flags WHERE user_id=? AND code=? AND created_at>=?`).get(userId,code,since).count; },
     updateLastSettled(userId, date, now) { db.prepare('UPDATE user_progress SET last_settled_date=?,updated_at=? WHERE user_id=?').run(date,now,userId); },

@@ -638,17 +638,66 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return { expired: expired.length, reconciled: reconciled.length };
   }
 
-  function adjust({userId,delta,reason,actor='system',allowDemotion=false}){
+  function adjust({userId,delta,reason,actor,allowDemotion=false,caseId=null,reasonCode='ADMIN_ADJUSTMENT'}){
     if(!Number.isSafeInteger(delta)||delta===config.units.zero||!reason?.trim())throw httpError(400,'INVALID_ADJUSTMENT','Provide a non-zero whole XP delta and a reason.');
+    if(!actor?.trim()||reason.trim().length<10)throw httpError(400,'ADMIN_REASON_REQUIRED','An admin actor and a note of at least 10 characters are required.');
+    const requiresCase=delta<config.units.zero||reasonCode.startsWith('INTEGRITY_');
+    if(requiresCase&&(!caseId||!actor?.trim()||reason.trim().length<10))throw httpError(400,'ADMIN_REASON_REQUIRED','Negative or integrity XP changes require a case, actor, and note of at least 10 characters.');
     return db.transaction(()=>{
       const progress=ensureProgress(userId);if(!progress)throw httpError(404,'USER_NOT_FOUND','User not found.');
+      const reviewCase=requiresCase?integrity.caseById(caseId):null;
+      if(requiresCase&&(!reviewCase||reviewCase.userId!==userId||reviewCase.status!=='IN_REVIEW'))throw httpError(409,'CASE_NOT_IN_REVIEW','An owned case in review is required for this adjustment.');
       if(BigInt(progress.lifetimeXp)+BigInt(delta)<BigInt(config.units.zero))throw httpError(422,'XP_BELOW_ZERO','Adjustment cannot make lifetime XP negative.');
       const newLifetime=safeTotal(BigInt(progress.lifetimeXp)+BigInt(delta));const newSpendable=safeTotal(BigInt(progress.spendableXp)+BigInt(delta));const derived=derivedLevel(newLifetime,config);
       const maxLevel=allowDemotion?derived:Math.max(progress.maxLevelReached,derived);const now=nowIso();
       const id=ledger.insert({userId,entryType:'ADJUSTMENT',ruleId:null,entitlementKey:null,transitionNo:null,idempotencyKey:`u${userId}:ADJ:${cryptoRandom()}`,
-        lifetimeDelta:delta,balanceDelta:delta,periodType:'admin',periodKey:localDate(userId),reversesEntryId:null,sourceEventId:null,reasonCode:'ADMIN_ADJUSTMENT',note:reason.trim(),configVersion:CONFIG_VERSION,actor,createdAt:now});
+        lifetimeDelta:delta,balanceDelta:delta,periodType:'admin',periodKey:localDate(userId),reversesEntryId:null,sourceEventId:null,reasonCode,note:reason.trim(),configVersion:CONFIG_VERSION,actor,createdAt:now});
       ledger.updateProgress(userId,{lifetimeXp:newLifetime,spendableXp:newSpendable,maxLevelReached:maxLevel,lastLedgerId:id,updatedAt:now});
+      integrity.insertNotice({userId,kind:'XP_CHANGE',code:'INTEGRITY_ADJUSTED',data:{delta,ledgerEntryId:id},ledgerEntryId:id,dedupeKey:`ADJUSTMENT:${id}:NOTICE`,createdAt:now});
+      if(requiresCase){
+        const action=delta<config.units.zero?'CLAWBACK':'NOTE';
+        integrity.insertAdminAction({caseId,action,actor:`admin:${actor.trim()}`,note:reason.trim(),payload:{adjustmentId:id,delta,reasonCode},idempotencyKey:`CASE${caseId}:ADJUSTMENT:${id}`,createdAt:now});
+      }
       return ledger.progress(userId);
+    })();
+  }
+
+  function clawback({userId,caseId,entryIds,actor,note}) {
+    if(!Array.isArray(entryIds)||entryIds.length===0||!entryIds.every(Number.isSafeInteger))throw httpError(400,'INVALID_CLAWBACK_ENTRIES','Select one or more ledger entry ids.');
+    if(!actor?.trim()||!note?.trim()||note.trim().length<10)throw httpError(400,'ADMIN_REASON_REQUIRED','An admin actor and a note of at least 10 characters are required.');
+    return db.transaction(()=>{
+      const reviewCase=integrity.caseById(caseId);
+      if(!reviewCase||reviewCase.userId!==userId)throw httpError(404,'INTEGRITY_CASE_NOT_FOUND','Integrity case not found.');
+      if(reviewCase.status!=='IN_REVIEW')throw httpError(409,'CASE_NOT_IN_REVIEW','Only cases in review can be resolved.');
+      const candidates=ledger.clawbackCandidates(userId,[...new Set(entryIds)]);
+      let remaining=config.integrity.clawback.maxPerCaseXp;let lifetime=ledger.progress(userId)?.lifetimeXp??config.units.zero;
+      const planned=[];
+      for(const entry of candidates){
+        if(remaining<=config.units.zero||lifetime<=config.units.zero)break;
+        const delta=Math.min(entry.lifetimeDelta,remaining,lifetime);
+        if(delta>config.units.zero){planned.push({entry,delta});remaining-=delta;lifetime-=delta;}
+      }
+      const totalXp=planned.reduce((sum,row)=>sum+row.delta,config.units.zero);
+      if(totalXp===config.units.zero)return {applied:false,removedXp:config.units.zero,entryIds:[]};
+      const now=nowIso();
+      const sequence=integrity.caseActionCount(caseId,'CLAWBACK')+1;
+      const recorded=integrity.insertAdminAction({caseId,action:'CLAWBACK',actor:`admin:${actor.trim()}`,note:note.trim(),
+        payload:{entryIds:planned.map(({entry})=>entry.id),removedXp:totalXp},idempotencyKey:`CASE${caseId}:CLAWBACK:${sequence}`,createdAt:now});
+      if(!recorded)return {applied:false,removedXp:config.units.zero,entryIds:[]};
+      const progress=ledger.progress(userId);let lifetimeXp=progress.lifetimeXp;let spendableXp=progress.spendableXp;let lastLedgerId=progress.lastLedgerId;
+      for(const {entry,delta} of planned){
+        const id=ledger.insert({userId,entryType:'ADJUSTMENT',ruleId:null,entitlementKey:null,transitionNo:null,
+          idempotencyKey:`u${userId}:ADJ:CASE${caseId}:${entry.id}`,lifetimeDelta:-delta,balanceDelta:-delta,periodType:'admin',periodKey:localDate(userId),
+          reversesEntryId:entry.id,sourceEventId:null,reasonCode:'INTEGRITY_CLAWBACK',note:note.trim(),configVersion:CONFIG_VERSION,actor:`admin:${actor.trim()}`,createdAt:now});
+        ledger.lockEntitlement(userId,entry.entitlementKey,'CLAWBACK',now,caseId);
+        lifetimeXp=safeTotal(BigInt(lifetimeXp)-BigInt(delta));spendableXp=safeTotal(BigInt(spendableXp)-BigInt(delta));lastLedgerId=id;
+        publish('XP_DEDUCTED',userId,{ledgerId:id,ruleId:null,entitlementKey:entry.entitlementKey,delta:-delta,reasonCode:'INTEGRITY_CLAWBACK',message:messageForReason('INTEGRITY_CLAWBACK'),lifetimeXp,spendableXp},`XP_DEDUCTED:${userId}:${id}`);
+      }
+      ledger.updateProgress(userId,{lifetimeXp,spendableXp,maxLevelReached:progress.maxLevelReached,lastLedgerId,updatedAt:now});
+      integrity.setCaseResolution({caseId,resolution:'CLAWBACK',actor:actor.trim(),at:now});
+      integrity.confirmCaseHolds(caseId,now);
+      integrity.insertNotice({userId,kind:'XP_CHANGE',code:'CLAWBACK_APPLIED',data:{totalXp,dates:planned.map(({entry})=>entry.periodKey)},dedupeKey:`CASE${caseId}:CLAWBACK_NOTICE`,createdAt:now});
+      return {applied:true,removedXp:totalXp,entryIds:planned.map(({entry})=>entry.id)};
     })();
   }
 
@@ -661,7 +710,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   }
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
-    publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,adjust,requeueDead,listFlags,localDate,recordIntegritySignal,
+    publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory}};
 }
 

@@ -2,7 +2,7 @@ import rules from '../gamification/rules.config.js';
 import { createIntegrityRepository } from '../repositories/integrityRepository.js';
 import { responseLadder } from '../gamification/integrity/risk.js';
 
-const ACTIONS = Object.freeze({ DISMISS:'DISMISS', WARN:'WARN', HOLD_EXTENDED:'EXTEND_HOLD', RESTRICTED:'EXTEND_HOLD', EXTEND_HOLD:'EXTEND_HOLD', RELEASE_HOLD:'RELEASE_HOLD', NOTE:'NOTE' });
+const ACTIONS = Object.freeze({ DISMISS:'DISMISS', WARN:'WARN', HOLD_EXTENDED:'EXTEND_HOLD', RESTRICTED:'EXTEND_HOLD', EXTEND_HOLD:'EXTEND_HOLD', RELEASE_HOLD:'RELEASE_HOLD', CLAWBACK:'CLAWBACK', NOTE:'NOTE' });
 
 export function createIntegrityAdminService({ db, engine, clock = { now: () => new Date() } }) {
   const repository=createIntegrityRepository(db);
@@ -21,7 +21,8 @@ export function createIntegrityAdminService({ db, engine, clock = { now: () => n
     const since=new Date(now.getTime()-rules.integrity.holds.rollingWindowDays*rules.units.hoursPerDay*rules.units.minutesPerHour*rules.units.secondsPerMinute*rules.units.millisecondsPerSecond).toISOString();
     return responseLadder({flags,accountCreatedAt:createdAt,now,autoHoldsLast90Days:repository.autoHoldCountSince(userId,since)},rules);
   }
-  function applyCaseAction({ caseId, action, actor, note, days = rules.integrity.holds.autoDurationDays }) {
+  function applyCaseAction(input) {
+    const {caseId,action,actor,note,days=rules.integrity.holds.autoDurationDays}=input;
     if (!Number.isSafeInteger(caseId) || caseId < 1) throw new TypeError('caseId must be a positive integer.');
     if (!actor?.trim()) throw new TypeError('An admin actor is required.');
     if (!note?.trim() || note.trim().length < 10) throw new TypeError('An admin note must contain at least 10 characters.');
@@ -30,9 +31,10 @@ export function createIntegrityAdminService({ db, engine, clock = { now: () => n
     const timestamp=now();
     const caseRow=repository.caseById(caseId);
     if (!caseRow) throw new Error('Integrity case not found.');
-    const resolution = action==='DISMISS'?'DISMISSED':action==='WARN'?'WARNED':action==='HOLD_EXTENDED'?'HOLD_EXTENDED':action==='RESTRICTED'?'RESTRICTED':null;
+    const resolution = action==='DISMISS'?'DISMISSED':action==='WARN'?'WARNED':action==='HOLD_EXTENDED'?'HOLD_EXTENDED':action==='RESTRICTED'?'RESTRICTED':action==='CLAWBACK'?'CLAWBACK':null;
     if (caseRow.status==='RESOLVED' && resolution && caseRow.resolution===resolution) return {applied:false,caseId,action};
     if (['DISMISS','WARN','HOLD_EXTENDED','RESTRICTED','CLAWBACK'].includes(action) && caseRow.status!=='IN_REVIEW') throw new Error('Only cases in review can be resolved.');
+    if(action==='CLAWBACK')return engine.clawback({userId:caseRow.userId,caseId,entryIds:input.entryIds,actor,note});
     if (actionType==='EXTEND_HOLD' && (!Number.isSafeInteger(days)||days<1)) throw new TypeError('Hold duration must be a positive whole number of days.');
     const shouldRelease=action==='DISMISS'||action==='WARN'||action==='RELEASE_HOLD';
     const sequence=repository.caseActionCount(caseId,actionType)+1;
@@ -53,7 +55,7 @@ export function createIntegrityAdminService({ db, engine, clock = { now: () => n
         if(endsAt<=hold.endsAt)throw new Error('The requested end time does not extend the current hold.');
         repository.extendCaseHold(caseId,endsAt);
         if(action==='HOLD_EXTENDED'||action==='RESTRICTED')repository.setCaseResolution({caseId,resolution:action,actor:actor.trim(),at:timestamp});
-      } else if(action==='CLAWBACK') throw new Error('CLAWBACK tooling is not available yet.');
+      }
       if(shouldRelease){
         repository.releaseCaseHolds(caseId,timestamp);
         repository.insertNotice({userId:caseRow.userId,kind:'REVIEW',code:action==='WARN'?'CASE_RESOLVED_WARNING':'HOLD_RELEASED',data:{caseId},dedupeKey:`CASE${caseId}:${actionType}:NOTICE`,createdAt:timestamp});

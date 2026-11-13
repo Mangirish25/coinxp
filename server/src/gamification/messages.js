@@ -16,6 +16,7 @@ const templates = Object.freeze({
   NO_LONGER_TRACKED: 'This period no longer meets the tracking requirements.',
   LEVEL_UP: 'You reached a new level.',
   ADMIN_ADJUSTMENT: 'An administrator adjusted your XP balance.',
+  INTEGRITY_CLAWBACK: 'An integrity adjustment removed XP tied to a reviewed case.',
 });
 
 const integrityMessages = Object.freeze({
@@ -26,9 +27,14 @@ const integrityMessages = Object.freeze({
   XP_REINSTATED: 'A previously reversed reward has been reinstated.',
   CORRECTION_NO_XP_CHANGE: 'Thanks for correcting this entry. No XP changed.',
   SETTLED_FINAL: 'This settled period is final; the correction did not change its reward.',
+  CASE_RESOLVED_WARNING: 'A review is complete. Your rewards can continue normally.',
+  HOLD_RELEASED: 'The reward hold has been released. Eligible rewards are being recalculated.',
+  CASE_UPDATED: 'There is an update to a reviewed reward record.',
+  INTEGRITY_ADJUSTED: 'An administrator reviewed and adjusted your XP. Your financial features are unaffected.',
 });
 
 export function integrityMessageForCode(code, data = {}) {
+  if (code === 'CLAWBACK_APPLIED') return `${data.totalXp ?? 0} XP was adjusted after a review. Financial features are unaffected.`;
   if (code.startsWith('BUDGET_')) {
     const daily = data.scope === 'daily_limit';
     const subject = daily ? "today's limit" : data.scope === 'category_monthly' ? 'this category budget' : 'this month’s budget';

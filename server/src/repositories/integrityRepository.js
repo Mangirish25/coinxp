@@ -37,6 +37,7 @@ export function createIntegrityRepository(db) {
     setFlagStatus(flagId,status) { return db.prepare('UPDATE gamification_flags SET status=? WHERE id=?').run(status,flagId).changes; },
     activeHoldsForCase(caseId) { return db.prepare(`SELECT id,starts_at AS startsAt,ends_at AS endsAt FROM reward_holds WHERE case_id=? AND status='ACTIVE' ORDER BY id DESC`).all(caseId); },
     releaseCaseHolds(caseId, at) { return db.prepare(`UPDATE reward_holds SET status='RELEASED',released_at=? WHERE case_id=? AND status='ACTIVE'`).run(at,caseId).changes; },
+    confirmCaseHolds(caseId, at) { return db.prepare(`UPDATE reward_holds SET status='CONFIRMED',released_at=? WHERE case_id=? AND status='ACTIVE'`).run(at,caseId).changes; },
     extendCaseHold(caseId, endsAt) { return db.prepare(`UPDATE reward_holds SET ends_at=? WHERE case_id=? AND status='ACTIVE'`).run(endsAt,caseId).changes; },
     recentFlags(userId, since) {
       return db.prepare(`SELECT code,status,severity_points AS severityPoints,created_at AS createdAt,local_date AS localDate

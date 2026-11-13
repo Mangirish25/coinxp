@@ -77,4 +77,23 @@ describe('Part 8 integrity transparency API', () => {
     expect(db.prepare("SELECT count(*) AS count FROM case_actions WHERE case_id=? AND action='DISMISS'").get(caseId).count).toBe(1);
     expect(() => db.prepare('DELETE FROM case_actions WHERE case_id=?').run(caseId)).toThrow(/append-only/);
   });
+
+  it('XP-012/CR-9: applies a bounded, case-linked clawback and locks the entitlement', async () => {
+    db.prepare(`INSERT INTO categories(user_id,name,type,is_default,created_at) VALUES(NULL,'Food','expense',1,?)`).run(new Date().toISOString());
+    const categoryId=db.prepare("SELECT id FROM categories WHERE name='Food'").get().id;
+    const date=todayInTimezone('Asia/Kolkata');
+    await request(app).post('/api/transactions').set('Cookie',cookie).send({type:'expense',amount:'25',categoryId,transactionDate:date}).expect(201);
+    const award=db.prepare("SELECT id FROM xp_ledger WHERE user_id=1 AND rule_id='XP-001' AND entry_type='AWARD'").get();
+    const now=new Date().toISOString();
+    const caseId=Number(db.prepare(`INSERT INTO integrity_cases(user_id,status,risk_score,distinct_codes,opened_at) VALUES(1,'IN_REVIEW',8,2,?)`).run(now).lastInsertRowid);
+    const admin=createIntegrityAdminService({db,engine:app.locals.gameEngine});
+    expect(()=>app.locals.gameEngine.adjust({userId:1,delta:-1,reason:'A sufficiently long admin note.',actor:'reviewer'})).toThrow(/case/i);
+    const input={caseId,action:'CLAWBACK',entryIds:[award.id],actor:'reviewer',note:'Reviewed evidence; tracking award was not earned.'};
+    expect(admin.applyCaseAction(input)).toMatchObject({applied:true,removedXp:10});
+    expect(admin.applyCaseAction(input)).toMatchObject({applied:false,action:'CLAWBACK'});
+    expect(db.prepare('SELECT lifetime_xp AS lifetimeXp FROM user_progress WHERE user_id=1').get().lifetimeXp).toBe(25);
+    expect(db.prepare("SELECT reason,case_id AS caseId FROM entitlement_locks WHERE entitlement_key LIKE 'XP-001:%'").get()).toMatchObject({reason:'CLAWBACK',caseId});
+    expect(db.prepare("SELECT reason_code AS reasonCode FROM xp_ledger WHERE reason_code='INTEGRITY_CLAWBACK'").get().reasonCode).toBe('INTEGRITY_CLAWBACK');
+    expect(db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=1 AND code='CLAWBACK_APPLIED'").get().count).toBe(1);
+  });
 });
