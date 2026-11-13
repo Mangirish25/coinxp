@@ -221,6 +221,6 @@ Authenticated Part 8 endpoints currently available:
 | `POST` | `/api/integrity/appeals` | Submit one message (up to 500 characters) for an eligible hold/case |
 | `GET` | `/api/transactions/unexpected-quota` | Local-month allowance usage |
 
-The app shell has an on-demand notice center with hold transparency and appeal submission. The transaction form exposes the unexpected-expense marker and monthly quota. Pure detector and risk-scoring modules live under `server/src/gamification/integrity/`.
+The app shell has an on-demand notice center with hold transparency and appeal submission. The transaction form exposes the unexpected-expense marker and monthly quota. Daily, monthly, category, and current-month pace warnings are created as in-app notices and deduplicated by threshold period. Pure warning, detector, correction, and risk-scoring modules live under `server/src/gamification/integrity/`.
 
-This checkpoint does not yet implement the full Part 8 scope: budget threshold warning generation, every detector's data-window collector, admin case/flag CLI actions, clawback and adjustment gates, theoretical XP ceiling checks, retention purge, and the complete correction-class notices still need follow-up work. The migration and APIs are groundwork; do not treat this section as a claim that all Part 8 acceptance criteria are complete.
+This checkpoint does not yet implement the full Part 8 scope: every detector's data-window collector, admin case/flag CLI actions, clawback and adjustment gates, theoretical XP ceiling checks, retention purge, and all correction-class notices still need follow-up work. The migration and APIs are groundwork; do not treat this section as a claim that all Part 8 acceptance criteria are complete.

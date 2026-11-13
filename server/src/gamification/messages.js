@@ -28,7 +28,19 @@ const integrityMessages = Object.freeze({
   SETTLED_FINAL: 'This settled period is final; the correction did not change its reward.',
 });
 
-export function integrityMessageForCode(code) {
+export function integrityMessageForCode(code, data = {}) {
+  if (code.startsWith('BUDGET_')) {
+    const daily = data.scope === 'daily_limit';
+    const subject = daily ? "today's limit" : data.scope === 'category_monthly' ? 'this category budget' : 'this month’s budget';
+    const budgetPaise = Number(data.budgetPaise ?? 0);
+    const spentPaise = Number(data.spentPaise ?? 0);
+    if (code.endsWith('_EXCEEDED')) return `Spending is ${formatINR(spentPaise-budgetPaise)} over ${subject} (${formatINR(budgetPaise)}).`;
+    if (code.endsWith('_NEAR')) {
+      const usedPercent = budgetPaise === 0 ? 0 : Number((BigInt(spentPaise)*100n)/BigInt(budgetPaise));
+      return `You've used ${usedPercent}% of ${subject} (${formatINR(budgetPaise)}).`;
+    }
+    if (code === 'BUDGET_PACE_RISK') return `Spending is moving faster than the monthly budget pace. ${formatINR(spentPaise)} used of ${formatINR(budgetPaise)} so far.`;
+  }
   return integrityMessages[code] ?? 'There is an update for your CoinXP account.';
 }
 

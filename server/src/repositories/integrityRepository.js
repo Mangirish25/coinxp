@@ -60,7 +60,7 @@ export function createIntegrityRepository(db) {
     latestNotice(userId) { return db.prepare('SELECT code FROM user_notices WHERE user_id=? ORDER BY id DESC LIMIT 1').get(userId)?.code ?? null; },
     eligibleAppealCase(userId, now, since) {
       return db.prepare(`SELECT c.id,c.status,c.resolution,c.appeal_count AS appealCount FROM integrity_cases c
-        WHERE c.user_id=? AND c.appeal_count=0 AND (EXISTS (SELECT 1 FROM reward_holds h WHERE h.case_id=c.id AND h.status='ACTIVE' AND h.ends_at>?)
+        WHERE c.user_id=? AND (EXISTS (SELECT 1 FROM reward_holds h WHERE h.case_id=c.id AND h.status='ACTIVE' AND h.ends_at>?)
           OR (c.status='RESOLVED' AND c.resolution IN ('CLAWBACK','RESTRICTED') AND c.resolved_at>=?))
         ORDER BY CASE WHEN c.status='RESOLVED' THEN 1 ELSE 0 END,c.opened_at DESC LIMIT 1`).get(userId,now,since) ?? null;
     },

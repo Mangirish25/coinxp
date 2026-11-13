@@ -10,7 +10,7 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
     notices(userId, filters) {
       const result = repository.listNotices(userId, filters);
       const priority = { RESTRICTION: 5, XP_CHANGE: 4, WARNING: 3, REVIEW: 2, INFO: 1 };
-      return { data: result.data.map((notice) => ({ ...notice, message: integrityMessageForCode(notice.code) }))
+      return { data: result.data.map((notice) => ({ ...notice, message: integrityMessageForCode(notice.code,notice.data) }))
         .sort((a,b) => priority[b.kind]-priority[a.kind] || b.id-a.id),
       pagination: { page: filters.page, pageSize: filters.pageSize, total: result.total, totalPages: Math.ceil(result.total/filters.pageSize) } };
     },
@@ -27,6 +27,7 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
       const since = new Date(instant.getTime()-rules.integrity.review.appealWindowDays*rules.units.hoursPerDay*rules.units.minutesPerHour*rules.units.secondsPerMinute*rules.units.millisecondsPerSecond).toISOString();
       const eligible = repository.eligibleAppealCase(userId,current,since);
       if (!eligible) throw httpError(409,'APPEAL_NOT_AVAILABLE','There is no eligible case to appeal.');
+      if (eligible.appealCount > 0) throw httpError(409,'APPEAL_ALREADY_SENT','An appeal has already been submitted for this case.');
       const applied = repository.recordAppeal({ caseId: eligible.id, message, userId, createdAt: current, idempotencyKey: `CASE${eligible.id}:APPEAL:1` });
       if (!applied) throw httpError(409,'APPEAL_ALREADY_SENT','An appeal has already been submitted for this case.');
       repository.insertNotice({ userId, kind:'REVIEW', code:'APPEAL_RECEIVED', dedupeKey:`CASE${eligible.id}:APPEAL_RECEIVED`, createdAt:current, data:{ caseId:eligible.id } });

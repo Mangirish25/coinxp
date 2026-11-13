@@ -3,6 +3,7 @@ import rules from '../rules.config.js';
 import { runDetectors } from './detectors/index.js';
 import { responseLadder, scoreIntegrity } from './risk.js';
 import { adherenceSpendPaise, correctionAmnestyPaise, evaluatedSpendPaise } from './correction.js';
+import { buildBudgetWarnings } from './warnings.js';
 
 describe('Part 8 detector registry and response scoring', () => {
   it('ABU-007: detector passes are deterministic and preserve date-only evidence', () => {
@@ -30,5 +31,15 @@ describe('Part 8 detector registry and response scoring', () => {
     expect(amnesty).toBe(35000);
     expect(evaluatedSpendPaise(75000,amnesty)).toBe(40000);
     expect(evaluatedSpendPaise(30000,amnesty)).toBe(0);
+  });
+
+  it('BUD-003: fires threshold warnings at 80 percent, over budget and exact pace boundary', () => {
+    const input={today:'2026-11-13',daily:{limitPaise:10000,spentPaise:8000},monthly:{month:'2026-11',daysInMonth:30,daysElapsed:10,
+      monthlyTotal:{budgetPaise:100000,spentPaise:80000},categories:[]},monthStatus:{currentMonth:'2026-11',daysElapsed:10},config:rules};
+    const warnings=buildBudgetWarnings(input);
+    expect(warnings.map((warning)=>warning.code)).toEqual(['BUDGET_DAILY_NEAR','BUDGET_MONTHLY_NEAR','BUDGET_PACE_RISK']);
+    input.daily.spentPaise=10001; input.monthly.monthlyTotal.spentPaise=100001;
+    expect(buildBudgetWarnings(input).map((warning)=>warning.code)).toContain('BUDGET_DAILY_EXCEEDED');
+    expect(buildBudgetWarnings(input).map((warning)=>warning.code)).toContain('BUDGET_MONTHLY_EXCEEDED');
   });
 });

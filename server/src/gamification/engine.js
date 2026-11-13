@@ -15,6 +15,8 @@ import { httpError } from '../utils/httpError.js';
 import { createIntegrityRepository } from '../repositories/integrityRepository.js';
 import { responseLadder } from './integrity/risk.js';
 import { correctionAmnestyPaise, evaluatedSpendPaise, unexpectedExpensePaise } from './integrity/correction.js';
+import { buildBudgetWarnings } from './integrity/warnings.js';
+import { createBudgetService } from '../services/budgetService.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -42,6 +44,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   const transactions=createTransactionRepository(db);
   const budgetHistory=createBudgetHistoryRepository(db);
   const integrity=createIntegrityRepository(db);
+  const budgets=createBudgetService({db,gameEngine:{clock}});
 
   function nowIso(){return clock.now().toISOString();}
   function localDate(userId, instant=clock.now()){
@@ -85,6 +88,17 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
       }
     }
     return true;
+  }
+
+  function evaluateBudgetWarnings(userId, dailyDate = localDate(userId)) {
+    const today=localDate(userId);
+    const monthStatus=budgets.status(userId,dailyDate.slice(0,7));
+    const daily=budgets.dailyStatus(userId,dailyDate);
+    const warnings=buildBudgetWarnings({daily,monthly:monthStatus,today:dailyDate,
+      monthStatus:{currentMonth:today.slice(0,7),daysElapsed:monthStatus.daysElapsed},config});
+    for(const warning of warnings)integrity.insertNotice({userId,kind:warning.kind,code:warning.code,data:warning.data,
+      dedupeKey:warning.dedupeKey,createdAt:nowIso()});
+    return warnings;
   }
 
   function recordIntegritySignal(userId, code, windowKey, evidence = {}) {
@@ -317,6 +331,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const details={limitPaise:limit?.amountPaise??null,limitSource:limit?.source??null,expensePaise,unexpectedPaise,adherencePaise,liveCount,tracked,xpTracked,noSpend,noSpendDeclared,xpEligible:reviews?.xpEligible===1,baselinePaise:baseline,cutoffAt:cutoff,requiredTracked:null};
     const inserted=settlements.insert({userId,periodType:'day',periodKey:date,outcome,reasonCode,details,settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
     if(inserted){publish('DAY_SETTLED',userId,{periodType:'day',periodKey:date,outcome,tracked:xpTracked,xpTracked,noSpendDeclared},`DAY_SETTLED:${userId}:${date}`);}
+    evaluateBudgetWarnings(userId,date);
     if(outcome==='PASS')return reconcileKey({userId,key:`XP-003:${date}`,ruleId:'XP-003',periodType:'day',periodKey:date,desired:true,reasonCode:'DAILY_ADHERENCE',sourceEventId:null,note:String(limit.amountPaise)});
     return null;
   }
@@ -453,6 +468,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
           if(transactions.countNonLiveCreatedSince(event.userId,since,config.tracking.minQualifyingAmountPaise)>=config.rateLimits.bulkBackfillThreshold)
             raiseIntegrityFlag(event.userId,'BULK_BACKFILL',event.localDate,{threshold:config.rateLimits.bulkBackfillThreshold});
         }
+        const affectedDate=event.data.after?.transactionDate??event.data.before?.transactionDate??event.localDate;
+        if(affectedDate===localDate(event.userId))evaluateBudgetWarnings(event.userId,affectedDate);
         return result;
       }
       case 'BUDGET_UPSERTED': {
@@ -463,6 +480,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
           const range=monthOf(relevant);
           if(settlements.get(event.userId,'month',range)?.outcome==='FAIL')raiseIntegrityFlag(event.userId,'LIMIT_RAISED_AFTER_FAIL',event.localDate,{scope:event.data.scope,month:range});
         }
+        evaluateBudgetWarnings(event.userId,localDate(event.userId));
         return result.filter(Boolean);
       }
       case 'BUDGET_DELETED': return [];
