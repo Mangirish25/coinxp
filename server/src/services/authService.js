@@ -5,6 +5,8 @@ import { createUserRepository } from '../repositories/userRepository.js';
 import { nowIso } from '../utils/dates.js';
 import { httpError } from '../utils/httpError.js';
 import rules from '../gamification/rules.config.js';
+import { createTimezoneChangeRepository } from '../repositories/timezoneChangeRepository.js';
+import { localDateAt, shiftDate } from '../gamification/dateMath.js';
 
 function publicUser(user) {
   return {
@@ -40,6 +42,7 @@ function isUniqueEmailError(error) {
 
 export function createAuthService({ db, secret, gameEngine }) {
   const users = createUserRepository(db);
+  const timezoneChanges = createTimezoneChangeRepository(db);
 
   return {
     async register({ email, password, displayName, timezone }) {
@@ -97,6 +100,8 @@ export function createAuthService({ db, secret, gameEngine }) {
       catch { throw httpError(400, 'INVALID_TIMEZONE', 'Choose a valid time zone.'); }
       if (current.timezone === normalized) return publicUser(users.findById(id));
       const now = gameEngine?.clock.now() ?? new Date();
+      const oldLocalDate = localDateAt(now, current.timezone);
+      const newLocalDate = localDateAt(now, normalized);
       if (current.timezoneChangedAt) {
         const elapsed = now.getTime() - new Date(current.timezoneChangedAt).getTime();
         const cooldownMs = rules.timezone.changeCooldownDays * rules.units.hoursPerDay * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
@@ -104,9 +109,14 @@ export function createAuthService({ db, secret, gameEngine }) {
       }
       db.transaction(() => {
         users.updateTimezone({ id, timezone: normalized, changedAt: now.toISOString() });
-        const date = gameEngine?.localDate(id, now);
+        const skippedDates = [];
+        for (let date = shiftDate(oldLocalDate, rules.units.one); date < newLocalDate; date = shiftDate(date, rules.units.one)) skippedDates.push(date);
+        timezoneChanges.insert({ userId: id, changedAt: now.toISOString(), oldTimezone: current.timezone, newTimezone: normalized,
+          oldLocalDate, newLocalDate, skippedDates });
+        const date = newLocalDate;
         gameEngine?.enqueue({ eventType: 'TIMEZONE_CHANGED', userId: id, occurredAt: now.toISOString(), localDate: date, timezone: normalized,
-          data: { previousTimezone: current.timezone, timezone: normalized } });
+          data: { previousTimezone: current.timezone, timezone: normalized, oldTimezone: current.timezone, newTimezone: normalized,
+            oldLocalDate, newLocalDate, skippedDates } });
       })();
       if (gameEngine) { try { gameEngine.processUser(id); } catch { /* timezone changes remain successful after commit */ } }
       return publicUser(users.findById(id));

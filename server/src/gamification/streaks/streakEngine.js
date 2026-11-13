@@ -48,6 +48,7 @@ export function computeNext(state, input, config) {
         effects.push({ type: 'milestone', milestone: milestone.days, xp: milestone.xp, date: day, runId: next.run.id });
       }
     }
+    effects.push({ type: 'event', event: 'STREAK_MAINTAINED', date: day, runId: next.run.id, length });
     next.milestones.sort((a, b) => a - b);
     const grants = [];
     if (length === tracking.freeze.starterAtLength) grants.push({ reason: 'STARTER', idempotencyKey: 'STARTER' });

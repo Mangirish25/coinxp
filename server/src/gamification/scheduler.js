@@ -2,7 +2,7 @@ import rules from './rules.config.js';
 import { createOutboxRepository } from './outbox/outboxRepository.js';
 import { shiftDate } from './dateMath.js';
 
-export function startGamificationScheduler(engine, { db, clock = engine.clock, logger = console, intervalMs } = {}) {
+export function startGamificationScheduler(engine, { db, streakAdvancer, clock = engine.clock, logger = console, intervalMs } = {}) {
   const outbox = createOutboxRepository(db);
   const interval = intervalMs ?? rules.settlement.schedulerIntervalMinutes * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
   let running = false;
@@ -14,7 +14,10 @@ export function startGamificationScheduler(engine, { db, clock = engine.clock, l
     try {
       for (const userId of outbox.pendingUsers(clock.now().toISOString(), rules.events.workerBatchSize)) engine.processUser(userId);
       const users = engine.dependencies.settlements.users();
-      for (const user of users) engine.settleUser(user.id);
+      for (const user of users) {
+        engine.settleUser(user.id);
+        streakAdvancer?.advanceUser(user.id);
+      }
       const reconcileInterval = rules.events.cleanupIntervalHours * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
       if (clock.now().getTime() - lastReconciliation >= reconcileInterval) {
         for (const user of users) {

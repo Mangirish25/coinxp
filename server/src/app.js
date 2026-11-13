@@ -12,6 +12,8 @@ import { createDashboardRoutes } from './routes/dashboardRoutes.js';
 import { createAnalyticsRoutes } from './routes/analyticsRoutes.js';
 import { createGamificationRoutes } from './routes/gamificationRoutes.js';
 import { createGamificationEngine } from './gamification/engine.js';
+import { createStreakAdvancer } from './gamification/streaks/advance.js';
+import { createStreakRoutes } from './routes/streakRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -21,7 +23,9 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   const env = config ?? loadEnv();
   const app = express();
   const gameEngine = createGamificationEngine({ db, logger, clock, enabled: env.gamificationEnabled !== false });
+  const streakService = createStreakAdvancer({ db, gameEngine, config: undefined, clock, logger });
   app.locals.gameEngine = gameEngine;
+  app.locals.streakService = streakService;
   app.use(helmet());
   app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(cookieParser());
@@ -36,6 +40,7 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/dashboard', createDashboardRoutes(apiOptions));
   app.use('/api/analytics', createAnalyticsRoutes(apiOptions));
   app.use('/api/gamification', createGamificationRoutes(apiOptions));
+  app.use('/api/streaks', createStreakRoutes({ db, env, streakService }));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

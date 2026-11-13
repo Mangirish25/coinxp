@@ -295,6 +295,21 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return shiftDate(localDateAt(shifted,user.timezone),-config.units.one);
   }
 
+  function publishStreak(eventType,userId,data,dedupeKey,occurredAt=nowIso()) {
+    if (!enabled) return null;
+    const user=facts.user(userId);
+    const eventDate=localDateAt(new Date(occurredAt),user?.timezone??'UTC');
+    const envelope=buildEnvelope({eventType,userId,data,occurredAt,localDate:eventDate,timezone:user?.timezone},clock);
+    enqueueRow(db,envelope,{status:'PUBLISHED',dedupeKey});
+    return envelope;
+  }
+
+  function awardStreakMilestone({userId,milestone,xp,date,runId}) {
+    return reconcileKey({userId,key:`STR-006:TRACKING_DAILY:${milestone}`,ruleId:'STR-006',periodType:'once',
+      periodKey:`TRACKING_DAILY:${milestone}`,desired:true,value:xp,reasonCode:'STREAK_MILESTONE',
+      sourceEventId:null,note:`${date};run:${runId}`});
+  }
+
   function settleUser(userId){
     if(!enabled)return {settled:config.units.zero};
     const user=facts.user(userId); if(!user)return {settled:config.units.zero};
@@ -538,7 +553,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   function requeueDead(userId=null){return outbox.requeueDead(userId);}
   function listFlags(userId){return ledger.listFlags(userId);}
 
-  return {enabled,clock,enqueue,processUser,settleUser,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
+  return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:()=>({configVersion:CONFIG_VERSION,...config}),rebuildCache,reconcileRange,adjust,requeueDead,listFlags,localDate,
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory}};
 }
