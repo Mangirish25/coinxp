@@ -637,8 +637,13 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   function requeueDead(userId=null){return outbox.requeueDead(userId);}
   function listFlags(userId){return ledger.listFlags(userId);}
 
+  function clientRules() {
+    const safeRules = Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'integrity'));
+    return { configVersion: CONFIG_VERSION, ...safeRules };
+  }
+
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
-    publicRules:()=>({configVersion:CONFIG_VERSION,...config}),rebuildCache,reconcileRange,releaseSweep,adjust,requeueDead,listFlags,localDate,recordIntegritySignal,
+    publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,adjust,requeueDead,listFlags,localDate,recordIntegritySignal,
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory}};
 }
 

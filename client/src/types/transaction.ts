@@ -24,6 +24,9 @@ export interface Transaction {
   categoryIcon: string | null;
   categoryType: 'income' | 'expense';
   gamification?: { xpDelta: number; lifetimeXp: number; spendableXp: number; level: number; title: string; levelUp: { from: number; to: number; title: string } | null } | null;
+  isUnexpected: boolean;
+  unexpectedReason: string | null;
+  unexpectedFirstFlagMonth: string | null;
 }
 
 export interface Pagination {

@@ -202,3 +202,25 @@ npm run gamification:requeue-dead -- 12 --apply
 ```
 
 `GET /api/health` adds `gamificationDeadEvents`. Review these counts and the stored flags during operations; individual flag details and internal retry errors are not exposed through public API routes.
+
+## Part 8: thresholds and reward integrity (implementation in progress)
+
+The Part 8 migration is `007_integrity_foundation.sql`. It adds in-app notices, cases and append-only case actions, reward holds, entitlement locks, audit-run storage, and the unexpected-expense fields. Policy numbers are grouped under `integrity` in `server/src/gamification/rules.config.js`; the public gamification-rules endpoint intentionally omits that section so detector thresholds are not disclosed.
+
+An expense marked unexpected consumes one marker in the user's local month, and that marker is never refunded. At the daily settlement, flagged unexpected expenses are subtracted only for XP-003 daily-limit adherence. They remain in budgets, analytics, balances, and XP-005 monthly budget evaluation. The transaction API provides `GET /api/transactions/unexpected-quota`; create and patch accept `isUnexpected` and an optional configured `unexpectedReason`.
+
+When `integrity.correction.amnestyHours` is greater than zero, a spend increase inside the window after settlement is excluded from the evaluated spend up to the window edge. The default is zero hours, preserving the existing immediate-reversal policy. Reversals and reinstatements use the existing XP ledger transitions; a held reward only defers positive XP-003/004/005 transitions and STR-006 milestone XP. Financial operations remain available during a hold. Automatic signals are deduplicated, score-capped per code, and require distinct eligible signal codes plus account-age and rolling-hold gates before starting a hold.
+
+Authenticated Part 8 endpoints currently available:
+
+| Method | Endpoint | Behavior |
+| ------ | -------- | -------- |
+| `GET` | `/api/integrity/status` | Active reward hold, appeal availability, unread count, and last notice code |
+| `GET` | `/api/integrity/notices?page=&pageSize=&unreadOnly=&kind=` | Owner-scoped notices with copy resolved from `gamification/messages.js` |
+| `POST` | `/api/integrity/notices/ack` | Monotonic acknowledgement through `{ "upToId": n }` |
+| `POST` | `/api/integrity/appeals` | Submit one message (up to 500 characters) for an eligible hold/case |
+| `GET` | `/api/transactions/unexpected-quota` | Local-month allowance usage |
+
+The app shell has an on-demand notice center with hold transparency and appeal submission. The transaction form exposes the unexpected-expense marker and monthly quota. Pure detector and risk-scoring modules live under `server/src/gamification/integrity/`.
+
+This checkpoint does not yet implement the full Part 8 scope: budget threshold warning generation, every detector's data-window collector, admin case/flag CLI actions, clawback and adjustment gates, theoretical XP ceiling checks, retention purge, and the complete correction-class notices still need follow-up work. The migration and APIs are groundwork; do not treat this section as a claim that all Part 8 acceptance criteria are complete.

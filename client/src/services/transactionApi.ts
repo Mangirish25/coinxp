@@ -11,6 +11,7 @@ function showGamification(result: Transaction) {
 function invalidateTransactions() {
   invalidateBudgetStatus();
   invalidateFinancialSummaries();
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('coinxp:integrity-refresh'));
 }
 
 export const transactionApi = {
@@ -58,5 +59,8 @@ export const transactionApi = {
   },
   history(id: number) {
     return apiFetch<AuditEntry[]>(`/api/transactions/${id}/history`);
+  },
+  unexpectedQuota() {
+    return apiFetch<{ month: string; quota: number; used: number; remaining: number; enabled: boolean }>('/api/transactions/unexpected-quota');
   },
 };

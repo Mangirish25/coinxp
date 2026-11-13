@@ -434,10 +434,14 @@ function TransactionDialog({
   const [date, setDate] = useState(transaction?.transactionDate ?? todayFor(timezone));
   const [description, setDescription] = useState(transaction?.description ?? '');
   const [reason, setReason] = useState('');
+  const [isUnexpected, setIsUnexpected] = useState(transaction?.isUnexpected ?? false);
+  const [unexpectedReason, setUnexpectedReason] = useState(transaction?.unexpectedReason ?? '');
+  const [quota, setQuota] = useState<{ quota: number; used: number; remaining: number; enabled: boolean } | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const options = categories.filter((c) => c.type === type);
   const isOld = transaction && transaction.transactionDate < todayFor(timezone);
+  useEffect(() => { void transactionApi.unexpectedQuota().then(setQuota).catch(() => setQuota(null)); }, []);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const invalid = validateTransactionForm(amount, description, categoryId, date, timezone);
@@ -454,6 +458,8 @@ function TransactionDialog({
         categoryId: Number(categoryId),
         transactionDate: date,
         description: description.trim() || null,
+        isUnexpected: type === 'expense' && isUnexpected,
+        ...(type === 'expense' && isUnexpected ? { unexpectedReason: unexpectedReason || null } : {}),
         ...(transaction ? { reason: reason.trim() || undefined } : {}),
       };
       if (transaction) await transactionApi.update(transaction.id, body);
@@ -485,6 +491,7 @@ function TransactionDialog({
             onClick={() => {
               setType('income');
               setCategoryId('');
+              setIsUnexpected(false);
             }}
           >
             Income
@@ -538,6 +545,18 @@ function TransactionDialog({
             placeholder="What was this for?"
           />
         </label>
+        {type === 'expense' && quota?.enabled && <fieldset className="rounded-xl border border-black/10 p-3">
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={isUnexpected}
+            disabled={!transaction?.unexpectedFirstFlagMonth && quota.remaining === 0 && !isUnexpected}
+            onChange={(event) => setIsUnexpected(event.target.checked)} />
+            <span><span className="font-medium">Unexpected expense</span><span className="mt-1 block text-xs text-ink-500">Daily-limit XP comparison only · {quota.remaining} of {quota.quota} monthly markers remaining</span></span>
+          </label>
+          {isUnexpected && <label className="mt-3 block text-sm font-medium">Reason <span className="font-normal text-ink-400">(optional)</span>
+            <select className={`${control} mt-1 w-full`} value={unexpectedReason} onChange={(event) => setUnexpectedReason(event.target.value)}>
+              <option value="">Choose a reason</option><option value="MEDICAL">Medical</option><option value="EMERGENCY_REPAIR">Emergency repair</option><option value="FAMILY">Family</option><option value="TRAVEL">Travel</option><option value="OTHER">Other</option>
+            </select>
+          </label>}
+        </fieldset>}
         {transaction && (
           <>
             <label className="block text-sm font-medium">

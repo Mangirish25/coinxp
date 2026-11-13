@@ -1,16 +1,7 @@
 import rules from '../gamification/rules.config.js';
 import { createIntegrityRepository } from '../repositories/integrityRepository.js';
 import { httpError } from '../utils/httpError.js';
-
-const NOTICE_MESSAGES = Object.freeze({
-  INTEGRITY_NUDGE: 'We noticed some unusual activity around reward records. Your financial features are unaffected.',
-  HOLD_STARTED: 'Some outcome rewards are temporarily paused while we review activity. Your financial features are unaffected. You can submit an appeal.',
-  APPEAL_RECEIVED: 'Your appeal has been received for review.',
-  XP_REVERSED_LIMIT: 'A previously earned reward changed after a spending correction.',
-  XP_REINSTATED: 'A previously reversed reward has been reinstated.',
-  CORRECTION_NO_XP_CHANGE: 'Thanks for correcting this entry. No XP changed.',
-  SETTLED_FINAL: 'This settled period is final; the correction did not change its reward.',
-});
+import { integrityMessageForCode } from '../gamification/messages.js';
 
 export function createIntegrityService({ db, clock = { now: () => new Date() } }) {
   const repository = createIntegrityRepository(db);
@@ -19,7 +10,7 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
     notices(userId, filters) {
       const result = repository.listNotices(userId, filters);
       const priority = { RESTRICTION: 5, XP_CHANGE: 4, WARNING: 3, REVIEW: 2, INFO: 1 };
-      return { data: result.data.map((notice) => ({ ...notice, message: NOTICE_MESSAGES[notice.code] ?? 'There is an update for your CoinXP account.' }))
+      return { data: result.data.map((notice) => ({ ...notice, message: integrityMessageForCode(notice.code) }))
         .sort((a,b) => priority[b.kind]-priority[a.kind] || b.id-a.id),
       pagination: { page: filters.page, pageSize: filters.pageSize, total: result.total, totalPages: Math.ceil(result.total/filters.pageSize) } };
     },
@@ -44,4 +35,3 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
   };
 }
 
-export { NOTICE_MESSAGES };

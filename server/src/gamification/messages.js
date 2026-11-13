@@ -18,6 +18,20 @@ const templates = Object.freeze({
   ADMIN_ADJUSTMENT: 'An administrator adjusted your XP balance.',
 });
 
+const integrityMessages = Object.freeze({
+  INTEGRITY_NUDGE: 'We noticed some unusual activity around reward records. Your financial features are unaffected.',
+  HOLD_STARTED: 'Some outcome rewards are temporarily paused while we review activity. Your financial features are unaffected. You can submit an appeal.',
+  APPEAL_RECEIVED: 'Your appeal has been received for review.',
+  XP_REVERSED_LIMIT: 'A previously earned reward changed after a spending correction.',
+  XP_REINSTATED: 'A previously reversed reward has been reinstated.',
+  CORRECTION_NO_XP_CHANGE: 'Thanks for correcting this entry. No XP changed.',
+  SETTLED_FINAL: 'This settled period is final; the correction did not change its reward.',
+});
+
+export function integrityMessageForCode(code) {
+  return integrityMessages[code] ?? 'There is an update for your CoinXP account.';
+}
+
 export function messageForReason(reasonCode, details = {}) {
   const base = templates[reasonCode] ?? 'Your XP balance changed.';
   if (reasonCode === 'LIMIT_NOW_EXCEEDED' && details.limitPaise !== undefined) {

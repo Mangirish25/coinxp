@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards, Sparkles, Flame } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { GamificationToastHost } from './GamificationToastHost';
+import { IntegrityNoticeCenter } from './IntegrityNoticeCenter';
 
 const links = [
   { to: '/', label: 'Home', icon: Activity },
@@ -49,6 +50,7 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
+        {user && <IntegrityNoticeCenter />}
         {user ? (
           <div className="mt-6 flex items-center justify-between gap-3 border-t border-black/5 pt-5">
             <div className="min-w-0"><span className="block truncate text-sm font-medium text-ink-700" title={user.displayName}>{user.displayName}</span>

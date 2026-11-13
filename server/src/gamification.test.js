@@ -76,7 +76,9 @@ describe('Part 6 XP engine', () => {
   });
 
   it('publishes public rules, gates private routes, and reports disabled summaries consistently', async () => {
-    expect((await request(app).get('/api/gamification/rules').expect(200)).body.configVersion).toBe('0.1.0');
+    const publicRules = (await request(app).get('/api/gamification/rules').expect(200)).body;
+    expect(publicRules.configVersion).toBe('0.1.0');
+    expect(publicRules.integrity).toBeUndefined();
     await request(app).get('/api/gamification/ledger').expect(401);
     const summary = await request(app).get('/api/gamification/summary').set('Cookie', cookie).expect(200);
     expect(summary.body).toMatchObject({ lifetimeXp: 0, spendableXp: 0, level: 1, title: 'Beginner' });
