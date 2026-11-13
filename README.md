@@ -221,6 +221,18 @@ Authenticated Part 8 endpoints currently available:
 | `POST` | `/api/integrity/appeals` | Submit one message (up to 500 characters) for an eligible hold/case |
 | `GET` | `/api/transactions/unexpected-quota` | Local-month allowance usage |
 
+CLI-only integrity operations (all changes are dry-run unless `--apply` is present):
+
+```sh
+npm run integrity -- cases list --overdue
+npm run integrity -- cases show 12
+npm run integrity -- score --user 12
+npm run integrity -- cases resolve 12 --action DISMISS --actor reviewer --note "Reviewed evidence and cleared the case." --apply
+npm run integrity -- flags dismiss 28 --actor reviewer --note "Duplicate signal reviewed and cleared." --apply
+```
+
+Applied case actions require `--actor` and a note of at least 10 characters; actions are recorded in append-only `case_actions`. The current CLI supports case inspection, scoring, notes, warnings/dismissals, hold extension/release, and flag dismissal. Clawback and gated XP adjustment are not available yet.
+
 The app shell has an on-demand notice center with hold transparency and appeal submission. The transaction form exposes the unexpected-expense marker and monthly quota. Daily, monthly, category, and current-month pace warnings are created as in-app notices and deduplicated by threshold period. Pure warning, detector, correction, and risk-scoring modules live under `server/src/gamification/integrity/`.
 
-This checkpoint does not yet implement the full Part 8 scope: every detector's data-window collector, admin case/flag CLI actions, clawback and adjustment gates, theoretical XP ceiling checks, retention purge, and all correction-class notices still need follow-up work. The migration and APIs are groundwork; do not treat this section as a claim that all Part 8 acceptance criteria are complete.
+This checkpoint does not yet implement the full Part 8 scope: every detector's data-window collector, clawback and adjustment gates, theoretical XP ceiling checks, retention purge, and all correction-class notices still need follow-up work. The migration and APIs are groundwork; do not treat this section as a claim that all Part 8 acceptance criteria are complete.

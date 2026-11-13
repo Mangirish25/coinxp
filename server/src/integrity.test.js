@@ -3,6 +3,8 @@ import request from 'supertest';
 import { createApp } from './app.js';
 import { createDatabase } from './db/connection.js';
 import { migrateDatabase } from './db/migrator.js';
+import { todayInTimezone } from './utils/dates.js';
+import { createIntegrityAdminService } from './services/integrityAdminService.js';
 
 describe('Part 8 integrity transparency API', () => {
   let db; let app; let cookie;
@@ -43,5 +45,36 @@ describe('Part 8 integrity transparency API', () => {
     expect((await request(app).get('/api/integrity/status').set('Cookie',cookie)).body).toMatchObject({holdActive:true,scope:'OUTCOME_XP'});
     expect(db.prepare("SELECT count(*) AS count FROM integrity_cases WHERE user_id=1 AND status='IN_REVIEW'").get().count).toBe(1);
     expect(db.prepare("SELECT count(*) AS count FROM reward_holds WHERE user_id=1 AND auto=1 AND scope='OUTCOME_XP'").get().count).toBe(1);
+  });
+
+  it('BUD-003: emits a deduplicated local-day warning at the configured threshold', async () => {
+    db.prepare(`INSERT INTO categories(user_id,name,type,is_default,created_at) VALUES(NULL,'Food','expense',1,?)`).run(new Date().toISOString());
+    const categoryId=db.prepare("SELECT id FROM categories WHERE name='Food'").get().id;
+    const date=todayInTimezone('Asia/Kolkata');
+    await request(app).put('/api/budgets').set('Cookie',cookie).send({scope:'daily_limit',amount:'100'}).expect(200);
+    await request(app).post('/api/transactions').set('Cookie',cookie).send({type:'expense',amount:'80',categoryId,transactionDate:date}).expect(201);
+    let row=db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=1 AND code='BUDGET_DAILY_NEAR'").get();
+    expect(row.count).toBe(1);
+    await request(app).post('/api/transactions').set('Cookie',cookie).send({type:'expense',amount:'1',categoryId,transactionDate:date}).expect(201);
+    row=db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=1 AND code='BUDGET_DAILY_NEAR'").get();
+    expect(row.count).toBe(1);
+  });
+
+  it('ABU-011/DEL-006: records an audited case dismissal and makes a repeated resolution a no-op', () => {
+    const now=new Date().toISOString();
+    const caseId=Number(db.prepare(`INSERT INTO integrity_cases(user_id,status,risk_score,distinct_codes,opened_at) VALUES(1,'IN_REVIEW',8,1,?)`).run(now).lastInsertRowid);
+    db.prepare(`INSERT INTO gamification_flags(user_id,code,local_date,details_json,created_at,severity_points,evidence_json,detector_version,dedupe_key,case_id)
+      VALUES(1,'HIGH_EDIT_CHURN','2026-11-10','{}',?,2,'{}','1.0.0','admin-test-flag',?)`).run(now,caseId);
+    db.prepare(`INSERT INTO reward_holds(user_id,case_id,scope,status,auto,starts_at,ends_at,created_at) VALUES(1,?,'OUTCOME_XP','ACTIVE',1,?,?,?)`)
+      .run(caseId,now,new Date(Date.now()+86400000).toISOString(),now);
+    const admin=createIntegrityAdminService({db,clock:{now:()=>new Date()}});
+    const input={caseId,action:'DISMISS',actor:'reviewer',note:'Reviewed evidence and cleared the case.'};
+    expect(admin.applyCaseAction(input)).toMatchObject({applied:true,action:'DISMISS'});
+    expect(admin.applyCaseAction(input)).toMatchObject({applied:false,action:'DISMISS'});
+    expect(db.prepare('SELECT status,resolution FROM integrity_cases WHERE id=?').get(caseId)).toMatchObject({status:'RESOLVED',resolution:'DISMISSED'});
+    expect(db.prepare('SELECT status FROM gamification_flags WHERE case_id=?').get(caseId).status).toBe('DISMISSED');
+    expect(db.prepare('SELECT status FROM reward_holds WHERE case_id=?').get(caseId).status).toBe('RELEASED');
+    expect(db.prepare("SELECT count(*) AS count FROM case_actions WHERE case_id=? AND action='DISMISS'").get(caseId).count).toBe(1);
+    expect(() => db.prepare('DELETE FROM case_actions WHERE case_id=?').run(caseId)).toThrow(/append-only/);
   });
 });

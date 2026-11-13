@@ -624,14 +624,14 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return changed.filter(Boolean);
   }
 
-  function releaseSweep(userId) {
+  function releaseSweep(userId, { force = false } = {}) {
     if (!enabled) return { expired: 0, reconciled: 0 };
     const timestamp = nowIso();
     const expired = integrity.expiredHolds(userId,timestamp);
     for (const hold of expired) {
       if (integrity.expireHold(hold.id,timestamp)) integrity.recordReleaseAction(hold.caseId,hold.id,timestamp);
     }
-    if (expired.length === 0) return { expired: 0, reconciled: 0 };
+    if (expired.length === 0 && !force) return { expired: 0, reconciled: 0 };
     const today = localDate(userId,clock.now());
     const from = shiftDate(today,-config.settlement.sealAfterDays);
     const reconciled = reconcileRange(userId,from,today);

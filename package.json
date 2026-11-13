@@ -18,7 +18,8 @@
     "gamification:adjust": "npm run gamification:adjust --workspace server --",
     "gamification:reconcile": "npm run gamification:reconcile --workspace server --",
     "gamification:rebuild-cache": "npm run gamification:rebuild-cache --workspace server --",
-    "gamification:requeue-dead": "npm run gamification:requeue-dead --workspace server --"
+    "gamification:requeue-dead": "npm run gamification:requeue-dead --workspace server --",
+    "integrity": "npm run integrity --workspace server --"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

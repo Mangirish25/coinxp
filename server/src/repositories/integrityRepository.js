@@ -1,5 +1,43 @@
 export function createIntegrityRepository(db) {
   return {
+    listCases({ status = null, overdueBefore = null } = {}) {
+      const clauses=[]; const values=[];
+      if(status){clauses.push('c.status=?');values.push(status);}
+      if(overdueBefore){clauses.push("c.status IN ('OPEN','IN_REVIEW') AND c.opened_at<=?");values.push(overdueBefore);}
+      return db.prepare(`SELECT c.id,c.user_id AS userId,c.status,c.risk_score AS riskScore,c.distinct_codes AS distinctCodes,
+        c.opened_at AS openedAt,c.resolved_at AS resolvedAt,c.resolution,c.resolved_by AS resolvedBy,c.appeal_count AS appealCount
+        FROM integrity_cases c ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY c.opened_at,c.id`).all(...values);
+    },
+    userCreatedAt(userId) { return db.prepare('SELECT created_at AS createdAt FROM users WHERE id=?').get(userId)?.createdAt ?? null; },
+    caseById(caseId) { return db.prepare(`SELECT id,user_id AS userId,status,risk_score AS riskScore,distinct_codes AS distinctCodes,opened_at AS openedAt,
+      resolved_at AS resolvedAt,resolution,resolved_by AS resolvedBy,appeal_count AS appealCount FROM integrity_cases WHERE id=?`).get(caseId) ?? null; },
+    caseActions(caseId) { return db.prepare(`SELECT id,action,actor,note,payload_json AS payloadJson,idempotency_key AS idempotencyKey,created_at AS createdAt
+      FROM case_actions WHERE case_id=? ORDER BY id`).all(caseId).map((row)=>({...row,payload:JSON.parse(row.payloadJson)})); },
+    caseActionCount(caseId,action) { return db.prepare('SELECT count(*) AS count FROM case_actions WHERE case_id=? AND action=?').get(caseId,action).count; },
+    flags({ userId = null, code = null, caseId = null } = {}) {
+      const clauses=[]; const values=[];
+      if(userId!==null){clauses.push('user_id=?');values.push(userId);}
+      if(code){clauses.push('code=?');values.push(code);}
+      if(caseId!==null){clauses.push('case_id=?');values.push(caseId);}
+      return db.prepare(`SELECT id,user_id AS userId,code,local_date AS localDate,status,severity_points AS severityPoints,
+        evidence_json AS evidenceJson,detector_version AS detectorVersion,case_id AS caseId,created_at AS createdAt
+        FROM gamification_flags ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY id DESC`).all(...values)
+        .map((row)=>({...row,evidence:JSON.parse(row.evidenceJson)}));
+    },
+    insertAdminAction({ caseId, action, actor, note, payload = {}, idempotencyKey, createdAt }) {
+      return db.prepare(`INSERT OR IGNORE INTO case_actions(case_id,action,actor,note,payload_json,idempotency_key,created_at)
+        VALUES(?,?,?,?,?,?,?)`).run(caseId,action,actor,note,JSON.stringify(payload),idempotencyKey,createdAt).changes>0;
+    },
+    setCaseResolution({ caseId, resolution, actor, at }) {
+      return db.prepare(`UPDATE integrity_cases SET status='RESOLVED',resolution=?,resolved_by=?,resolved_at=? WHERE id=? AND status<>'RESOLVED'`)
+        .run(resolution,actor,at,caseId).changes;
+    },
+    setCaseStatus(caseId,status) { return db.prepare('UPDATE integrity_cases SET status=? WHERE id=?').run(status,caseId).changes; },
+    setCaseFlagsStatus(caseId,status) { return db.prepare('UPDATE gamification_flags SET status=? WHERE case_id=?').run(status,caseId).changes; },
+    setFlagStatus(flagId,status) { return db.prepare('UPDATE gamification_flags SET status=? WHERE id=?').run(status,flagId).changes; },
+    activeHoldsForCase(caseId) { return db.prepare(`SELECT id,starts_at AS startsAt,ends_at AS endsAt FROM reward_holds WHERE case_id=? AND status='ACTIVE' ORDER BY id DESC`).all(caseId); },
+    releaseCaseHolds(caseId, at) { return db.prepare(`UPDATE reward_holds SET status='RELEASED',released_at=? WHERE case_id=? AND status='ACTIVE'`).run(at,caseId).changes; },
+    extendCaseHold(caseId, endsAt) { return db.prepare(`UPDATE reward_holds SET ends_at=? WHERE case_id=? AND status='ACTIVE'`).run(endsAt,caseId).changes; },
     recentFlags(userId, since) {
       return db.prepare(`SELECT code,status,severity_points AS severityPoints,created_at AS createdAt,local_date AS localDate
         FROM gamification_flags WHERE user_id=? AND created_at>=?`).all(userId,since);

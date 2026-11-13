@@ -16,6 +16,7 @@
     "gamification:reconcile": "node scripts/gamificationCli.js reconcile",
     "gamification:rebuild-cache": "node scripts/gamificationCli.js rebuild-cache",
     "gamification:requeue-dead": "node scripts/gamificationCli.js requeue-dead",
+    "integrity": "node scripts/integrityCli.js",
     "db:reset": "node src/db/reset.js"
   },
   "dependencies": {
