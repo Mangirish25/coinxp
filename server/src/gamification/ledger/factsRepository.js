@@ -47,6 +47,10 @@ export function createGamificationFactsRepository(db) {
       return Number(db.prepare(`SELECT COALESCE(SUM(amount_paise),0) AS amount FROM transactions WHERE user_id=? AND deleted_at IS NULL AND type='expense'
         AND transaction_date>=? AND transaction_date<=?`).safeIntegers().get(userId,from,to).amount);
     },
+    currentAdherenceSpend(userId, from, to) {
+      return Number(db.prepare(`SELECT COALESCE(SUM(amount_paise),0) AS amount FROM transactions WHERE user_id=? AND deleted_at IS NULL
+        AND type='expense' AND is_unexpected=0 AND transaction_date>=? AND transaction_date<=?`).safeIntegers().get(userId,from,to).amount);
+    },
     currentLiveCount(userId, date, minimumPaise) {
       return db.prepare(`SELECT count(*) AS count FROM transactions WHERE user_id=? AND deleted_at IS NULL AND transaction_date=? AND created_local_date=? AND amount_paise>=?`)
         .get(userId,date,date,minimumPaise).count;

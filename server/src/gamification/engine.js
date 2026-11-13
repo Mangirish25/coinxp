@@ -14,6 +14,7 @@ import { createBudgetHistoryRepository } from '../repositories/budgetHistoryRepo
 import { httpError } from '../utils/httpError.js';
 import { createIntegrityRepository } from '../repositories/integrityRepository.js';
 import { responseLadder } from './integrity/risk.js';
+import { correctionAmnestyPaise, evaluatedSpendPaise, unexpectedExpensePaise } from './integrity/correction.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -155,6 +156,10 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const outputType=entryType==='REVERSAL'?'XP_DEDUCTED':'XP_EARNED';
     const outputData={ledgerId:entryId,ruleId,entitlementKey:key,delta:lifetimeDelta,reasonCode:transitionReasonCode,message:messageForReason(transitionReasonCode,{limitPaise:note}),lifetimeXp,spendableXp,level:maxLevelReached};
     publish(outputType,userId,outputData,`${outputType}:${userId}:${entryId}`);
+    if(ruleId==='XP-003'&&entryType==='REVERSAL'&&transitionReasonCode==='LIMIT_NOW_EXCEEDED')
+      integrity.insertNotice({userId,kind:'XP_CHANGE',code:'XP_REVERSED_LIMIT',data:{date:periodKey,ledgerEntryId:entryId},ledgerEntryId:entryId,dedupeKey:`XP:${key}#${nextNo}`,createdAt:nowIso()});
+    if(ruleId==='XP-003'&&entryType==='REINSTATE')
+      integrity.insertNotice({userId,kind:'XP_CHANGE',code:'XP_REINSTATED',data:{date:periodKey,ledgerEntryId:entryId},ledgerEntryId:entryId,dedupeKey:`XP:${key}#${nextNo}`,createdAt:nowIso()});
     for(const level of levelUpsBetween(progress.maxLevelReached,maxLevelReached)){
       const title=titleForLevel(level,config);
       publish('LEVEL_UP',userId,{from:level-config.units.one,to:level,title,ledgerId:entryId},`LEVEL_UP:${userId}:${level}`);
@@ -183,13 +188,35 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return facts.currentExpenseTotal(userId,from,to);
   }
 
+  function expenseTotalAsOf(userId,from,to,instant,excludeUnexpected) {
+    const rows=facts.auditRowsAsOf(userId,instant);
+    const transactions=transactionFactsAsOf(rows,from,to,instant,config.tracking.minQualifyingAmountPaise);
+    return transactions.reduce((sum,row)=>sum+(row.type==='expense'&&(!excludeUnexpected||!row.isUnexpected)?row.amountPaise:config.units.zero),config.units.zero);
+  }
+
+  function amnestyForSettlement(userId,settlement,from,to,excludeUnexpected) {
+    const hours=config.integrity.correction.amnestyHours;
+    if(hours<=config.units.zero)return config.units.zero;
+    const cutoff=new Date(settlement.details.cutoffAt);
+    const windowMs=hours*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond;
+    const endMs=Math.min(clock.now().getTime(),cutoff.getTime()+windowMs);
+    const edgeSpend=expenseTotalAsOf(userId,from,to,new Date(endMs).toISOString(),excludeUnexpected);
+    const base=excludeUnexpected
+      ? settlement.details.adherencePaise ?? Math.max(config.units.zero,settlement.details.expensePaise-(settlement.details.unexpectedPaise??config.units.zero))
+      : settlement.details.expensePaise;
+    return correctionAmnestyPaise(edgeSpend,base,clock.now(),settlement.details.cutoffAt);
+  }
+
   function reconcileSettledDay(userId,date,sourceEventId){
     const settlement=settlements.get(userId,'day',date); if(!settlement||periodSealed(userId,'day',date))return null;
     const key=`XP-003:${date}`;
     const tracked=currentTracked(userId,date).xpTracked;
-    const spent=currentExpenseTotal(userId,date,date);
+    const currentSpend=facts.currentAdherenceSpend(userId,date,date);
+    const amnesty=amnestyForSettlement(userId,settlement,date,date,true);
+    const spent=evaluatedSpendPaise(currentSpend,amnesty);
     const desired=settlement.outcome==='PASS'&&tracked&&spent<=settlement.details.limitPaise;
     const reasonCode=desired?'DAILY_ADHERENCE':settlement.outcome==='PASS'&&!tracked?'NO_LONGER_TRACKED':'LIMIT_NOW_EXCEEDED';
+    if(amnesty>config.units.zero)integrity.insertNotice({userId,kind:'XP_CHANGE',code:'CORRECTION_NO_XP_CHANGE',data:{date},dedupeKey:`XP:XP-003:${date}:AMNESTY`,createdAt:nowIso()});
     return reconcileKey({userId,key,ruleId:'XP-003',periodType:'day',periodKey:date,desired,
       reasonCode,sourceEventId,note:String(settlement.details.limitPaise??'')});
   }
@@ -219,7 +246,9 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const settlement=settlements.get(userId,'month',month); if(!settlement||periodSealed(userId,'month',month))return null;
     const startDate=monthStart(`${month}-01`); const eligibleDates=weekDateRange(startDate,monthEnd(month)).filter((date)=>date>=userProgressStart(userId));
     const count=eligibleDates.filter((date)=>currentTracked(userId,date).xpTracked).length;
-    const spent=currentExpenseTotal(userId,startDate,monthEnd(month));
+    const currentSpend=currentExpenseTotal(userId,startDate,monthEnd(month));
+    const amnesty=amnestyForSettlement(userId,settlement,startDate,monthEnd(month),false);
+    const spent=evaluatedSpendPaise(currentSpend,amnesty);
     const desired=settlement.outcome==='PASS'&&count>=settlement.details.requiredTracked&&spent<=settlement.details.budgetPaise;
     const reasonCode=desired?'MONTHLY_BUDGET_COMPLETION':count<settlement.details.requiredTracked?'NO_LONGER_TRACKED':'LIMIT_NOW_EXCEEDED';
     return reconcileKey({userId,key:`XP-005:${month}`,ruleId:'XP-005',periodType:'month',periodKey:month,desired,reasonCode,sourceEventId,note:String(settlement.details.budgetPaise??'')});
@@ -269,6 +298,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const asOfFacts=transactionFactsAsOf(audit,date,date,cutoff,config.tracking.minQualifyingAmountPaise);
     const active=asOfFacts.filter((item)=>item.transactionDate===date);
     const expensePaise=safeTotal(active.filter((item)=>item.type==='expense').reduce((sum,item)=>sum+BigInt(item.amountPaise),0n),'Expense total');
+    const unexpectedPaise=safeTotal(unexpectedExpensePaise(active),'Unexpected expense total');
+    const adherencePaise=expensePaise-unexpectedPaise;
     const liveCount=active.filter((item)=>item.live).length;
     const noSpend=Boolean(reviews?.noSpendDeclared)&&!active.some((item)=>item.type==='expense');
     const tracked=liveCount>0||noSpend;
@@ -281,9 +312,9 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     else if(!tracked){reasonCode='NOT_TRACKED';}
     else if(noSpend&&!reviews?.xpEligible){reasonCode='NO_SPEND_CAP';}
     else if(config.guards.limitRealism.enabled&&baseline!==null&&BigInt(limit.amountPaise)>BigInt(config.guards.limitRealism.factor)*BigInt(baseline)){reasonCode='LIMIT_NOT_MEANINGFUL';}
-    else if(xpTracked){outcome=expensePaise<=limit.amountPaise?'PASS':'FAIL';reasonCode=outcome==='PASS'?'DAILY_ADHERENCE':'LIMIT_EXCEEDED';}
+    else if(xpTracked){outcome=adherencePaise<=limit.amountPaise?'PASS':'FAIL';reasonCode=outcome==='PASS'?'DAILY_ADHERENCE':'LIMIT_EXCEEDED';}
     const noSpendDeclared=Boolean(reviews?.noSpendDeclared);
-    const details={limitPaise:limit?.amountPaise??null,limitSource:limit?.source??null,expensePaise,liveCount,tracked,xpTracked,noSpend,noSpendDeclared,xpEligible:reviews?.xpEligible===1,baselinePaise:baseline,cutoffAt:cutoff,requiredTracked:null};
+    const details={limitPaise:limit?.amountPaise??null,limitSource:limit?.source??null,expensePaise,unexpectedPaise,adherencePaise,liveCount,tracked,xpTracked,noSpend,noSpendDeclared,xpEligible:reviews?.xpEligible===1,baselinePaise:baseline,cutoffAt:cutoff,requiredTracked:null};
     const inserted=settlements.insert({userId,periodType:'day',periodKey:date,outcome,reasonCode,details,settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
     if(inserted){publish('DAY_SETTLED',userId,{periodType:'day',periodKey:date,outcome,tracked:xpTracked,xpTracked,noSpendDeclared},`DAY_SETTLED:${userId}:${date}`);}
     if(outcome==='PASS')return reconcileKey({userId,key:`XP-003:${date}`,ruleId:'XP-003',periodType:'day',periodKey:date,desired:true,reasonCode:'DAILY_ADHERENCE',sourceEventId:null,note:String(limit.amountPaise)});
@@ -313,6 +344,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const nextMonthStart=addDate(end,config.units.one); const cutoff=localInstantToUtc(nextMonthStart,config.settlement.cutoffLocalHour,timezone);
     const audit=facts.auditRowsAsOf(userId,cutoff); const asOfFacts=transactionFactsAsOf(audit,start,end,cutoff,config.tracking.minQualifyingAmountPaise);
     const expensePaise=safeTotal(asOfFacts.filter((row)=>row.type==='expense').reduce((sum,row)=>sum+BigInt(row.amountPaise),0n),'Monthly expense total');
+    const unexpectedPaise=safeTotal(unexpectedExpensePaise(asOfFacts),'Unexpected expense total');
     const trackedShareBps=dates.length?Math.floor((trackedDays*config.units.basisPoints)/dates.length):config.units.zero;
     const baseline=monthlyBaseline(userId,month);
     let outcome='INELIGIBLE';let reasonCode='NO_BUDGET';
@@ -321,7 +353,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     else if(trackedDays<required)reasonCode='LOW_TRACKING';
     else if(config.guards.limitRealism.enabled&&baseline!==null&&BigInt(budget.amountPaise)>BigInt(config.guards.limitRealism.factor)*BigInt(baseline))reasonCode='BUDGET_NOT_MEANINGFUL';
     else{outcome=expensePaise<=budget.amountPaise?'PASS':'FAIL';reasonCode=outcome==='PASS'?'MONTHLY_BUDGET_COMPLETION':'BUDGET_EXCEEDED';}
-    const details={budgetPaise:budget?.amountPaise??null,budgetSource:budget?.source??null,expensePaise,trackedDays,eligibleDays:dates.length,requiredTracked:required,trackedShareBps,baselinePaise:baseline,cutoffAt:cutoff};
+    const details={budgetPaise:budget?.amountPaise??null,budgetSource:budget?.source??null,expensePaise,unexpectedPaise,trackedDays,eligibleDays:dates.length,requiredTracked:required,trackedShareBps,baselinePaise:baseline,cutoffAt:cutoff};
     const inserted=settlements.insert({userId,periodType:'month',periodKey:month,outcome,reasonCode,details,settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
     if(inserted)publish('MONTH_SETTLED',userId,{periodType:'month',periodKey:month,outcome,tracked:trackedDays>0},`MONTH_SETTLED:${userId}:${month}`);
     if(outcome==='PASS')return reconcileKey({userId,key:`XP-005:${month}`,ruleId:'XP-005',periodType:'month',periodKey:month,desired:true,reasonCode:'MONTHLY_BUDGET_COMPLETION',note:String(budget.amountPaise)});

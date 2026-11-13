@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import rules from '../rules.config.js';
 import { runDetectors } from './detectors/index.js';
 import { responseLadder, scoreIntegrity } from './risk.js';
+import { adherenceSpendPaise, correctionAmnestyPaise, evaluatedSpendPaise } from './correction.js';
 
 describe('Part 8 detector registry and response scoring', () => {
   it('ABU-007: detector passes are deterministic and preserve date-only evidence', () => {
@@ -21,5 +22,13 @@ describe('Part 8 detector registry and response scoring', () => {
     expect(passed).toMatchObject({nudge:true,openCase:true,autoHold:true,distinctHoldEligible:2});
     const oneSignal = responseLadder({flags:flags.filter((flag)=>flag.code==='LIMIT_RESCUE_PATTERN'),accountCreatedAt:'2026-10-01T00:00:00.000Z',now:new Date('2026-11-13T00:00:00.000Z'),autoHoldsLast90Days:0},rules);
     expect(oneSignal.autoHold).toBe(false);
+  });
+
+  it('XP-011/BUD-004: excludes unexpected spend only from daily adherence and computes bounded amnesty', () => {
+    expect(adherenceSpendPaise([{type:'expense',amountPaise:40000,isUnexpected:false},{type:'expense',amountPaise:90000,isUnexpected:true}])).toBe(40000n);
+    const amnesty = correctionAmnestyPaise(75000,40000,new Date('2026-11-12T10:00:00.000Z'),'2026-11-12T00:00:00.000Z');
+    expect(amnesty).toBe(35000);
+    expect(evaluatedSpendPaise(75000,amnesty)).toBe(40000);
+    expect(evaluatedSpendPaise(30000,amnesty)).toBe(0);
   });
 });
