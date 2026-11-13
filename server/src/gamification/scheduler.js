@@ -17,6 +17,7 @@ export function startGamificationScheduler(engine, { db, streakAdvancer, clock =
       for (const user of users) {
         engine.settleUser(user.id);
         streakAdvancer?.advanceUser(user.id);
+        engine.releaseSweep?.(user.id);
       }
       const reconcileInterval = rules.events.cleanupIntervalHours * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
       if (clock.now().getTime() - lastReconciliation >= reconcileInterval) {

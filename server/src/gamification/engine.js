@@ -13,6 +13,7 @@ import { createTransactionRepository } from '../repositories/transactionReposito
 import { createBudgetHistoryRepository } from '../repositories/budgetHistoryRepository.js';
 import { httpError } from '../utils/httpError.js';
 import { createIntegrityRepository } from '../repositories/integrityRepository.js';
+import { responseLadder } from './integrity/risk.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -57,6 +58,37 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const user=facts.user(userId);
     const envelope=buildEnvelope({eventType,userId,data,localDate:date,timezone:user?.timezone},clock);
     enqueueRow(db,envelope,{status:'PUBLISHED',dedupeKey});
+  }
+
+  function raiseIntegrityFlag(userId, code, windowKey, evidence) {
+    const now = clock.now(); const timestamp = now.toISOString();
+    const inserted = ledger.raiseFlag(userId,code,windowKey,evidence,timestamp);
+    if (!inserted) return false;
+    const from = new Date(now.getTime()-config.integrity.scoring.windowDays*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
+    const flags = integrity.recentFlags(userId,from);
+    const autoSince = new Date(now.getTime()-config.integrity.holds.rollingWindowDays*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
+    const user = facts.user(userId);
+    if (!user) return true;
+    const ladder = responseLadder({ flags,accountCreatedAt:user.createdAt,now,autoHoldsLast90Days:integrity.autoHoldCountSince(userId,autoSince) },config);
+    if (ladder.nudge) {
+      const nudgeSince = new Date(now.getTime()-config.integrity.nudge.minDaysBetween*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
+      if (integrity.canNudgeSince(userId,nudgeSince)) integrity.insertNotice({userId,kind:'REVIEW',code:'INTEGRITY_NUDGE',data:{},dedupeKey:`INTEGRITY_NUDGE:${userId}:${timestamp.slice(0,10)}`,createdAt:timestamp});
+    }
+    if (ladder.openCase) {
+      const caseId = integrity.openRiskCase({userId,score:ladder.score,distinct:ladder.distinctHoldEligible,createdAt:timestamp});
+      integrity.attachRecentFlagsToCase(userId,caseId,from);
+      if (ladder.autoHold && !integrity.hasActiveHoldForScope(userId,config.integrity.holds.autoScope,timestamp)) {
+        const endsAt = new Date(now.getTime()+config.integrity.holds.autoDurationDays*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
+        const holdId = integrity.createAutoHold({userId,caseId,startsAt:timestamp,endsAt});
+        integrity.insertNotice({userId,kind:'RESTRICTION',code:'HOLD_STARTED',data:{holdUntil:endsAt},dedupeKey:`HOLD_STARTED:${holdId}`,createdAt:timestamp});
+      }
+    }
+    return true;
+  }
+
+  function recordIntegritySignal(userId, code, windowKey, evidence = {}) {
+    if (!enabled) return false;
+    return db.transaction(() => raiseIntegrityFlag(userId,code,windowKey,evidence))();
   }
 
   function ensureProgress(userId) {
@@ -127,8 +159,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
       const title=titleForLevel(level,config);
       publish('LEVEL_UP',userId,{from:level-config.units.one,to:level,title,ledgerId:entryId},`LEVEL_UP:${userId}:${level}`);
     }
-    if(nextNo>=config.churn.flagAtTransitions)ledger.raiseFlag(userId,'HIGH_EDIT_CHURN',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());
-    if(nextNo>=config.churn.lockAtTransitions){ledger.raiseFlag(userId,'KEY_LOCKED',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());ledger.lockEntitlement(userId,key,'CHURN',nowIso());}
+    if(nextNo>=config.churn.flagAtTransitions)raiseIntegrityFlag(userId,'HIGH_EDIT_CHURN',localDate(userId),{entitlementKey:key,transitionNo:nextNo});
+    if(nextNo>=config.churn.lockAtTransitions){raiseIntegrityFlag(userId,'KEY_LOCKED',localDate(userId),{entitlementKey:key,transitionNo:nextNo});ledger.lockEntitlement(userId,key,'CHURN',nowIso());}
     return {id:entryId,entryType,ruleId,lifetimeDelta,reasonCode:transitionReasonCode,levelUps:levelUpsBetween(progress.maxLevelReached,maxLevelReached).map((level)=>({from:level-config.units.one,to:level,title:titleForLevel(level,config)}))};
   }
 
@@ -379,7 +411,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
       case 'TIMEZONE_CHANGED': {
         const since=new Date(clock.now().getTime()-config.timezone.observationWindowDays*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
         if(outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since)>=config.timezone.flagChangeCount)
-          ledger.raiseFlag(event.userId,'TZ_HOPPING',event.localDate,{recentChanges:outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since),threshold:config.timezone.flagChangeCount},nowIso());
+          raiseIntegrityFlag(event.userId,'TZ_HOPPING',event.localDate,{recentChanges:outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since),threshold:config.timezone.flagChangeCount});
         return [];
       }
       case 'TRANSACTION_CREATED': case 'TRANSACTION_UPDATED': case 'TRANSACTION_DELETED': case 'TRANSACTION_RESTORED': {
@@ -387,7 +419,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
         if(event.eventType==='TRANSACTION_CREATED'){
           const since=new Date(clock.now().getTime()-config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
           if(transactions.countNonLiveCreatedSince(event.userId,since,config.tracking.minQualifyingAmountPaise)>=config.rateLimits.bulkBackfillThreshold)
-            ledger.raiseFlag(event.userId,'BULK_BACKFILL',event.localDate,{threshold:config.rateLimits.bulkBackfillThreshold},nowIso());
+            raiseIntegrityFlag(event.userId,'BULK_BACKFILL',event.localDate,{threshold:config.rateLimits.bulkBackfillThreshold});
         }
         return result;
       }
@@ -397,7 +429,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
         if(event.data.oldAmountPaise!==null&&event.data.newAmountPaise>event.data.oldAmountPaise&&event.data.scope!=='daily_limit'){
           const relevant=event.data.month??event.localDate;
           const range=monthOf(relevant);
-          if(settlements.get(event.userId,'month',range)?.outcome==='FAIL')ledger.raiseFlag(event.userId,'LIMIT_RAISED_AFTER_FAIL',event.localDate,{scope:event.data.scope,month:range},nowIso());
+          if(settlements.get(event.userId,'month',range)?.outcome==='FAIL')raiseIntegrityFlag(event.userId,'LIMIT_RAISED_AFTER_FAIL',event.localDate,{scope:event.data.scope,month:range});
         }
         return result.filter(Boolean);
       }
@@ -542,6 +574,20 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return changed.filter(Boolean);
   }
 
+  function releaseSweep(userId) {
+    if (!enabled) return { expired: 0, reconciled: 0 };
+    const timestamp = nowIso();
+    const expired = integrity.expiredHolds(userId,timestamp);
+    for (const hold of expired) {
+      if (integrity.expireHold(hold.id,timestamp)) integrity.recordReleaseAction(hold.caseId,hold.id,timestamp);
+    }
+    if (expired.length === 0) return { expired: 0, reconciled: 0 };
+    const today = localDate(userId,clock.now());
+    const from = shiftDate(today,-config.settlement.sealAfterDays);
+    const reconciled = reconcileRange(userId,from,today);
+    return { expired: expired.length, reconciled: reconciled.length };
+  }
+
   function adjust({userId,delta,reason,actor='system',allowDemotion=false}){
     if(!Number.isSafeInteger(delta)||delta===config.units.zero||!reason?.trim())throw httpError(400,'INVALID_ADJUSTMENT','Provide a non-zero whole XP delta and a reason.');
     return db.transaction(()=>{
@@ -560,7 +606,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   function listFlags(userId){return ledger.listFlags(userId);}
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
-    publicRules:()=>({configVersion:CONFIG_VERSION,...config}),rebuildCache,reconcileRange,adjust,requeueDead,listFlags,localDate,
+    publicRules:()=>({configVersion:CONFIG_VERSION,...config}),rebuildCache,reconcileRange,releaseSweep,adjust,requeueDead,listFlags,localDate,recordIntegritySignal,
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory}};
 }
 

@@ -1,5 +1,33 @@
 export function createIntegrityRepository(db) {
   return {
+    recentFlags(userId, since) {
+      return db.prepare(`SELECT code,status,severity_points AS severityPoints,created_at AS createdAt,local_date AS localDate
+        FROM gamification_flags WHERE user_id=? AND created_at>=?`).all(userId,since);
+    },
+    autoHoldCountSince(userId, since) { return db.prepare(`SELECT count(*) AS count FROM reward_holds WHERE user_id=? AND auto=1 AND created_at>=?`).get(userId,since).count; },
+    canNudgeSince(userId, since) { return !db.prepare(`SELECT 1 FROM user_notices WHERE user_id=? AND code='INTEGRITY_NUDGE' AND created_at>=? LIMIT 1`).get(userId,since); },
+    openRiskCase({ userId, score, distinct, createdAt }) {
+      const existing = db.prepare(`SELECT id FROM integrity_cases WHERE user_id=? AND status IN ('OPEN','IN_REVIEW') ORDER BY id DESC LIMIT 1`).get(userId);
+      if (existing) { db.prepare('UPDATE integrity_cases SET risk_score=?,distinct_codes=? WHERE id=?').run(score,distinct,existing.id); return existing.id; }
+      const result = db.prepare(`INSERT INTO integrity_cases(user_id,status,risk_score,distinct_codes,opened_at) VALUES(?,'IN_REVIEW',?,?,?)`).run(userId,score,distinct,createdAt);
+      const caseId = Number(result.lastInsertRowid);
+      db.prepare(`INSERT OR IGNORE INTO case_actions(case_id,action,actor,note,payload_json,idempotency_key,created_at)
+        VALUES(?,'OPENED','system',NULL,'{}',?,?)`).run(caseId,`CASE${caseId}:OPENED:1`,createdAt);
+      return caseId;
+    },
+    createAutoHold({ userId, caseId, startsAt, endsAt }) {
+      const result = db.prepare(`INSERT INTO reward_holds(user_id,case_id,scope,status,auto,starts_at,ends_at,created_at)
+        VALUES(?,?,'OUTCOME_XP','ACTIVE',1,?,?,?)`).run(userId,caseId,startsAt,endsAt,startsAt);
+      const holdId = Number(result.lastInsertRowid);
+      db.prepare(`INSERT OR IGNORE INTO case_actions(case_id,action,actor,note,payload_json,idempotency_key,created_at)
+        VALUES(?,'AUTO_HOLD','system',NULL,?,?,?)`).run(caseId,JSON.stringify({holdId,endsAt}),`CASE${caseId}:AUTO_HOLD:${holdId}`,startsAt);
+      return holdId;
+    },
+    attachRecentFlagsToCase(userId, caseId, since) { return db.prepare(`UPDATE gamification_flags SET case_id=? WHERE user_id=? AND created_at>=? AND case_id IS NULL`).run(caseId,userId,since).changes; },
+    expiredHolds(userId, now) { return db.prepare(`SELECT id,case_id AS caseId FROM reward_holds WHERE user_id=? AND status='ACTIVE' AND ends_at<=?`).all(userId,now); },
+    expireHold(id, now) { return db.prepare(`UPDATE reward_holds SET status='EXPIRED',released_at=? WHERE id=? AND status='ACTIVE'`).run(now,id).changes; },
+    recordReleaseAction(caseId, holdId, now) { return db.prepare(`INSERT OR IGNORE INTO case_actions(case_id,action,actor,payload_json,idempotency_key,created_at)
+      VALUES(?,'RELEASE_HOLD','system',?,?,?)`).run(caseId,JSON.stringify({holdId}),`HOLD${holdId}:RELEASE`,now).changes; },
     insertNotice({ userId, kind, code, data = {}, dedupeKey, createdAt, ledgerEntryId = null }) {
       const result = db.prepare(`INSERT OR IGNORE INTO user_notices
         (user_id,kind,code,data_json,ledger_entry_id,dedupe_key,created_at)

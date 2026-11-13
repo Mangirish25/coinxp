@@ -96,7 +96,9 @@ export function createLedgerRepository(db) {
         VALUES(?,?,?,?,?,?,?,?,?)`).run(userId,code,date,JSON.stringify(details),now,rules.integrity.scoring.points[code] ?? 0,JSON.stringify(details),rules.integrity.detectors.version,dedupeKey).changes > 0;
     },
     flag(userId, code, date, details, now) { return this.raiseFlag(userId,code,date,details,now); },
-    listFlags(userId) { return db.prepare(`SELECT code,local_date AS localDate,details_json AS detailsJson,created_at AS createdAt,status FROM gamification_flags WHERE user_id=? ORDER BY id DESC`).all(userId).map(row=>({...row,details:JSON.parse(row.detailsJson)})); },
+    listFlags(userId) { return db.prepare(`SELECT id,code,local_date AS localDate,details_json AS detailsJson,created_at AS createdAt,status,
+      severity_points AS severityPoints,evidence_json AS evidenceJson,detector_version AS detectorVersion,dedupe_key AS dedupeKey,case_id AS caseId
+      FROM gamification_flags WHERE user_id=? ORDER BY id DESC`).all(userId).map(row=>({...row,details:JSON.parse(row.detailsJson),evidence:JSON.parse(row.evidenceJson)})); },
     isKeyLocked(userId,key) {
       const entitlementLock=db.prepare(`SELECT 1 AS yes FROM entitlement_locks WHERE user_id=? AND entitlement_key=? LIMIT 1`).get(userId,key);
       if(entitlementLock)return true;

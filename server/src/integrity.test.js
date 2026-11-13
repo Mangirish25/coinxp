@@ -32,4 +32,16 @@ describe('Part 8 integrity transparency API', () => {
     await request(app).post('/api/integrity/appeals').set('Cookie',cookie).send({message:'Please review this hold.'}).expect(409);
     expect(db.prepare('SELECT action FROM case_actions WHERE case_id=?').get(caseId).action).toBe('APPEAL');
   });
+
+  it('ABU-009/010: requires two distinct signals and starts an outcome-only hold', async () => {
+    db.prepare('UPDATE users SET created_at=? WHERE id=1').run('2026-09-01T00:00:00.000Z');
+    const engine = app.locals.gameEngine;
+    for (const day of ['2026-11-10','2026-11-11']) engine.recordIntegritySignal(1,'LIMIT_RESCUE_PATTERN',day,{dates:[day],ids:[1]});
+    expect((await request(app).get('/api/integrity/status').set('Cookie',cookie)).body.holdActive).toBe(false);
+    engine.recordIntegritySignal(1,'MICRO_ENTRY_PATTERN','2026-11-12',{dates:['2026-11-12'],ids:[2]});
+    engine.recordIntegritySignal(1,'MICRO_ENTRY_PATTERN','2026-11-13',{dates:['2026-11-13'],ids:[3]});
+    expect((await request(app).get('/api/integrity/status').set('Cookie',cookie)).body).toMatchObject({holdActive:true,scope:'OUTCOME_XP'});
+    expect(db.prepare("SELECT count(*) AS count FROM integrity_cases WHERE user_id=1 AND status='IN_REVIEW'").get().count).toBe(1);
+    expect(db.prepare("SELECT count(*) AS count FROM reward_holds WHERE user_id=1 AND auto=1 AND scope='OUTCOME_XP'").get().count).toBe(1);
+  });
 });

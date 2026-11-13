@@ -70,7 +70,7 @@ const rulesConfig = Object.freeze({
         TZ_EXEMPT_REPEAT: 2, NOSPEND_PATTERN: 2, KEY_LOCKED: 3, UNEXPECTED_FLAG_PATTERN: 2, FREEZE_USED_RAPID: 0 }),
       holdEligible: Object.freeze(['HIGH_EDIT_CHURN', 'LIMIT_RAISED_AFTER_FAIL', 'LIMIT_SAWTOOTH', 'LIMIT_RESCUE_PATTERN',
         'MICRO_ENTRY_PATTERN', 'TZ_HOPPING', 'TZ_EXEMPT_REPEAT', 'NOSPEND_PATTERN', 'KEY_LOCKED', 'UNEXPECTED_FLAG_PATTERN']) }),
-    holds: Object.freeze({ autoDurationDays: 7, maxAutoPerRolling90Days: 2, maxTotalDays: 30, minAccountAgeDaysForAutoHold: 14, autoScope: 'OUTCOME_XP' }),
+    holds: Object.freeze({ autoDurationDays: 7, rollingWindowDays: 90, maxAutoPerRolling90Days: 2, maxTotalDays: 30, minAccountAgeDaysForAutoHold: 14, autoScope: 'OUTCOME_XP' }),
     review: Object.freeze({ targetResolutionDays: 7, appealMaxPerCase: 1, appealMaxChars: 500, appealWindowDays: 14 }),
     clawback: Object.freeze({ maxPerCaseXp: 500 }), ceiling: Object.freeze({ enabled: true, toleranceXp: 0 }),
     nudge: Object.freeze({ minDaysBetween: 14 }),
