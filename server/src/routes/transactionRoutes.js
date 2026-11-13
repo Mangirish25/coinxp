@@ -31,6 +31,7 @@ export function createTransactionRoutes(options) {
     handler: (_req, res) => res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many transaction changes. Please try again later.' } }) });
   router.post('/', writeLimit, requireJson, validateIdempotency, validateBody(createTransactionSchema), controller.create);
   router.get('/', validateQuery(transactionListQuerySchema), controller.list);
+  router.get('/unexpected-quota', controller.unexpectedQuota);
   router.get('/:id/history', validateParams(transactionIdParamsSchema), controller.history);
   router.post(
     '/:id/restore',

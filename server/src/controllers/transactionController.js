@@ -21,5 +21,6 @@ export function createTransactionController(options) {
     }),
     restore: asyncHandler(async (req, res) => res.json(await service.restore(req.user.id, req.validatedParams.id))),
     history: (req, res) => res.json(service.history(req.user.id, req.validatedParams.id)),
+    unexpectedQuota: (req, res) => res.json(service.unexpectedQuota(req.user.id)),
   };
 }

@@ -6,11 +6,12 @@ import { createTransactionRepository } from '../repositories/transactionReposito
 import { createUserRepository } from '../repositories/userRepository.js';
 import { httpError } from '../utils/httpError.js';
 import { paiseToRupees } from '../utils/money.js';
-import { localDateAt } from '../gamification/dateMath.js';
+import { localDateAt, monthOf } from '../gamification/dateMath.js';
 import { createHash } from 'node:crypto';
 import { createRequestIdempotencyRepository } from '../repositories/requestIdempotencyRepository.js';
+import rules from '../gamification/rules.config.js';
 
-const CHANGEABLE_FIELDS = ['type', 'amountPaise', 'categoryId', 'description', 'transactionDate'];
+const CHANGEABLE_FIELDS = ['type', 'amountPaise', 'categoryId', 'description', 'transactionDate', 'isUnexpected', 'unexpectedReason'];
 
 function publicTransaction(row) {
   if (!row) return null;
@@ -31,6 +32,9 @@ function publicTransaction(row) {
     categoryType: row.categoryType,
     createdLocalDate: row.createdLocalDate,
     createdTimezone: row.createdTimezone,
+    isUnexpected: Boolean(row.isUnexpected),
+    unexpectedReason: row.unexpectedReason,
+    unexpectedFirstFlagMonth: row.unexpectedFirstFlagMonth,
   };
 }
 
@@ -82,6 +86,8 @@ function eventSummary(transaction) {
     type: transaction.type,
     amountPaise: transaction.amountPaise,
     transactionDate: transaction.transactionDate,
+    isUnexpected: transaction.isUnexpected,
+    unexpectedReason: transaction.unexpectedReason,
   };
 }
 
@@ -97,6 +103,19 @@ export function createTransactionService({
   const users = createUserRepository(db);
   const idempotency = createRequestIdempotencyRepository(db);
   const currentIso = () => (gameEngine?.clock.now() ?? new Date()).toISOString();
+  const rulesUnexpectedEnabled = rules.integrity.unexpected.enabled;
+  const unexpectedQuota = rules.integrity.unexpected.perMonthQuota;
+  function currentLocalMonth(timezone) { return monthOf(localDateAt(new Date(currentIso()), timezone)); }
+  function ensureUnexpectedAllowed(userId, timezone, current, requested, type) {
+    if (!rulesUnexpectedEnabled || !requested) return;
+    if (type !== 'expense') throw httpError(422, 'UNEXPECTED_EXPENSE_ONLY', 'Only expenses can be marked unexpected.');
+    if (!current?.unexpectedFirstFlagMonth) {
+      const month = currentLocalMonth(timezone);
+      if (transactions.countUnexpectedSlots(userId, month) >= unexpectedQuota) {
+        throw httpError(422, 'UNEXPECTED_QUOTA_EXCEEDED', 'You have used this month’s unexpected expense allowance.');
+      }
+    }
+  }
 
   async function emitSafely(event) {
     if (!eventHandler) return;
@@ -153,12 +172,15 @@ export function createTransactionService({
       const timezone = requireTimezone(userId);
       validateTransactionDate(body.transactionDate, timezone, gameEngine?.clock.now() ?? new Date());
       validateCategory(categories, userId, body.categoryId, body.type);
+      ensureUnexpectedAllowed(userId, timezone, null, body.isUnexpected, body.type);
       const createdAt = currentIso();
       const createdLocalDate = localDateAt(new Date(createdAt), timezone);
       const committed = db.transaction(() => {
+        ensureUnexpectedAllowed(userId, timezone, null, body.isUnexpected, body.type);
         const id = transactions.create({
           ...body,
           description: body.description?.trim() || null,
+          unexpectedFirstFlagMonth: body.isUnexpected ? currentLocalMonth(timezone) : null,
           userId,
           createdAt,
           createdLocalDate,
@@ -171,7 +193,7 @@ export function createTransactionService({
           action: 'create',
           before: null,
           after,
-          changedFields: CHANGEABLE_FIELDS,
+          changedFields: [...CHANGEABLE_FIELDS],
           reason: null,
           createdAt,
         });
@@ -214,6 +236,8 @@ export function createTransactionService({
         const targetType = body.type ?? current.type;
         const targetCategoryId = body.categoryId ?? current.categoryId;
         const targetDate = body.transactionDate ?? current.transactionDate;
+        const targetUnexpected = body.isUnexpected ?? current.isUnexpected;
+        ensureUnexpectedAllowed(userId, timezone, current, targetUnexpected, targetType);
         validateCategory(categories, userId, targetCategoryId, targetType);
         validateTransactionDate(targetDate, timezone, gameEngine?.clock.now() ?? new Date());
 
@@ -221,6 +245,10 @@ export function createTransactionService({
           type: targetType,
           categoryId: targetCategoryId,
           transactionDate: targetDate,
+          isUnexpected: targetUnexpected,
+          unexpectedReason: targetUnexpected ? (body.unexpectedReason ?? current.unexpectedReason) : null,
+          ...(targetUnexpected && !current.unexpectedFirstFlagMonth
+            ? { unexpectedFirstFlagMonth: currentLocalMonth(timezone) } : {}),
           ...(body.amountPaise === undefined ? {} : { amountPaise: body.amountPaise }),
           ...(body.description === undefined
             ? {}
@@ -322,6 +350,12 @@ export function createTransactionService({
     history(userId, transactionId) {
       requireOwned(userId, transactionId, true);
       return audits.listForTransaction(userId, transactionId);
+    },
+    unexpectedQuota(userId) {
+      const timezone = requireTimezone(userId);
+      const month = currentLocalMonth(timezone);
+      const used = transactions.countUnexpectedSlots(userId, month);
+      return { month, quota: unexpectedQuota, used, remaining: Math.max(0, unexpectedQuota - used), enabled: rulesUnexpectedEnabled };
     },
   };
 }

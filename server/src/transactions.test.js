@@ -104,6 +104,21 @@ describe('transaction and category APIs', () => {
     await create(cookieA, { type: 'income' }).expect(422);
   });
 
+  it('BUD-004: consumes unexpected slots once and never refunds them', async () => {
+    const made = await create(cookieA, { isUnexpected: true, unexpectedReason: 'MEDICAL' }).expect(201);
+    expect(made.body).toMatchObject({ isUnexpected: true, unexpectedReason: 'MEDICAL' });
+    expect((await request(app).get('/api/transactions/unexpected-quota').set('Cookie', cookieA).expect(200)).body)
+      .toMatchObject({ quota: 3, used: 1, remaining: 2 });
+    await request(app).patch(`/api/transactions/${made.body.id}`).set('Cookie', cookieA)
+      .send({ isUnexpected: false }).expect(200);
+    await create(cookieA, { isUnexpected: true, type: 'income', categoryId: incomeCategory }).expect(422);
+    for (let index = 0; index < 2; index += 1) await create(cookieA, { isUnexpected: true }).expect(201);
+    await create(cookieA, { isUnexpected: true }).expect(422);
+    expect((await request(app).get('/api/transactions/unexpected-quota').set('Cookie', cookieA)).body.used).toBe(3);
+    const audit = await request(app).get(`/api/transactions/${made.body.id}/history`).set('Cookie', cookieA);
+    expect(audit.body[0].changedFields).toContain('isUnexpected');
+  });
+
   it('enforces category visibility and full transaction ownership', async () => {
     const ownCategory = await request(app)
       .post('/api/categories')

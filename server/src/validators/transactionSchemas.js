@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TRANSACTION_CONFIG } from '../config/transactionConstants.js';
 import { isValidDateString } from '../utils/dates.js';
 import { rupeesToPaise } from '../utils/money.js';
+import rules from '../gamification/rules.config.js';
 
 const transactionTypeSchema = z.enum(['income', 'expense']);
 const transactionDateSchema = z.string().refine(isValidDateString, {
@@ -36,6 +37,8 @@ const createFields = {
   categoryId: z.number().int().positive().safe(),
   description: z.string().trim().max(TRANSACTION_CONFIG.maxDescriptionLength).nullable().optional(),
   transactionDate: transactionDateSchema,
+  isUnexpected: z.boolean().optional().default(false),
+  unexpectedReason: z.enum(rules.integrity.unexpected.reasons).optional().nullable(),
 };
 
 export const createTransactionSchema = z.object(createFields).transform(({ amount, ...body }) => ({
@@ -55,6 +58,8 @@ export const updateTransactionSchema = z
       .nullable()
       .optional(),
     transactionDate: transactionDateSchema.optional(),
+    isUnexpected: z.boolean().optional(),
+    unexpectedReason: z.enum(rules.integrity.unexpected.reasons).optional().nullable(),
     reason: z.string().trim().max(TRANSACTION_CONFIG.maxAuditReasonLength).nullable().optional(),
   })
   .transform(({ amount, ...body }) =>

@@ -10,6 +10,8 @@ const SELECT_TRANSACTIONS = `
     t.transaction_date AS transactionDate, t.created_at AS createdAt,
     t.updated_at AS updatedAt, t.deleted_at AS deletedAt,
     t.created_local_date AS createdLocalDate, t.created_tz AS createdTimezone,
+    t.is_unexpected AS isUnexpected, t.unexpected_reason AS unexpectedReason,
+    t.unexpected_first_flag_month AS unexpectedFirstFlagMonth,
     c.name AS categoryName, c.icon AS categoryIcon, c.type AS categoryType
   FROM transactions t
   JOIN categories c ON c.id = t.category_id AND (c.user_id IS NULL OR c.user_id = t.user_id)
@@ -54,13 +56,13 @@ export function createTransactionRepository(db) {
   const byIdStatement = db.prepare(`${SELECT_TRANSACTIONS}
     WHERE t.id = ? AND t.user_id = ? AND (t.deleted_at IS NULL OR ? = 1)`);
   const insertStatement = db.prepare(`INSERT INTO transactions
-    (user_id, category_id, type, amount_paise, description, transaction_date, created_at, updated_at, created_local_date, created_tz)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    (user_id, category_id, type, amount_paise, description, transaction_date, created_at, updated_at, created_local_date, created_tz, is_unexpected, unexpected_reason, unexpected_first_flag_month)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   return {
     findByIdForUser(userId, id, includeDeleted = false) {
       return byIdStatement.get(id, userId, includeDeleted ? 1 : 0);
     },
-    create({ userId, categoryId, type, amountPaise, description, transactionDate, createdAt, createdLocalDate = null, createdTimezone = null }) {
+    create({ userId, categoryId, type, amountPaise, description, transactionDate, createdAt, createdLocalDate = null, createdTimezone = null, isUnexpected = false, unexpectedReason = null, unexpectedFirstFlagMonth = null }) {
       const result = insertStatement.run(
         userId,
         categoryId,
@@ -72,6 +74,9 @@ export function createTransactionRepository(db) {
         createdAt,
         createdLocalDate,
         createdTimezone,
+        isUnexpected ? 1 : 0,
+        unexpectedReason,
+        unexpectedFirstFlagMonth,
       );
       return Number(result.lastInsertRowid);
     },
@@ -99,11 +104,16 @@ export function createTransactionRepository(db) {
         categoryId: 'category_id',
         description: 'description',
         transactionDate: 'transaction_date',
+        isUnexpected: 'is_unexpected',
+        unexpectedReason: 'unexpected_reason',
+        unexpectedFirstFlagMonth: 'unexpected_first_flag_month',
       };
       const entries = Object.entries(changes).filter(([key]) => columns[key]);
       if (!entries.length) return 0;
-      const assignments = entries.map(([key]) => `${columns[key]} = ?`);
-      const values = entries.map(([, value]) => value);
+      const assignments = entries.map(([key]) => key === 'unexpectedFirstFlagMonth'
+        ? 'unexpected_first_flag_month = COALESCE(unexpected_first_flag_month, ?)'
+        : `${columns[key]} = ?`);
+      const values = entries.map(([key, value]) => key === 'isUnexpected' ? (value ? 1 : 0) : value);
       assignments.push('updated_at = ?');
       values.push(updatedAt, id, userId);
       return db
@@ -187,6 +197,10 @@ export function createTransactionRepository(db) {
     countNonLiveCreatedSince(userId, since, minimumPaise) {
       return db.prepare(`SELECT count(*) AS count FROM transactions WHERE user_id=? AND created_at>=? AND created_local_date IS NOT NULL
         AND created_local_date<>transaction_date AND amount_paise>=?`).get(userId,since,minimumPaise).count;
+    },
+    countUnexpectedSlots(userId, month) {
+      return db.prepare(`SELECT count(DISTINCT id) AS used FROM transactions
+        WHERE user_id = ? AND unexpected_first_flag_month = ?`).get(userId, month).used;
     },
   };
 }
