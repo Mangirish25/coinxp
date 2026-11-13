@@ -73,6 +73,7 @@ const rulesConfig = Object.freeze({
     holds: Object.freeze({ autoDurationDays: 7, rollingWindowDays: 90, maxAutoPerRolling90Days: 2, maxTotalDays: 30, minAccountAgeDaysForAutoHold: 14, autoScope: 'OUTCOME_XP' }),
     review: Object.freeze({ targetResolutionDays: 7, appealMaxPerCase: 1, appealMaxChars: 500, appealWindowDays: 14 }),
     clawback: Object.freeze({ maxPerCaseXp: 500 }), ceiling: Object.freeze({ enabled: true, toleranceXp: 0 }),
+    audit: Object.freeze({ intervalHours: 24 }),
     nudge: Object.freeze({ minDaysBetween: 14 }),
     retention: Object.freeze({ flagsDays: 400, casesDays: 730, noticesDays: 365 }),
   }),

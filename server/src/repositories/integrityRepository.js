@@ -1,3 +1,9 @@
+function safeIntegerNumber(value) {
+  const integer=typeof value==='bigint'?value:BigInt(value??0);
+  if(integer>BigInt(Number.MAX_SAFE_INTEGER)||integer<BigInt(Number.MIN_SAFE_INTEGER))throw new RangeError('Integrity audit value exceeds the safe integer range.');
+  return Number(integer);
+}
+
 export function createIntegrityRepository(db) {
   return {
     listCases({ status = null, overdueBefore = null } = {}) {
@@ -9,6 +15,36 @@ export function createIntegrityRepository(db) {
         FROM integrity_cases c ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''} ORDER BY c.opened_at,c.id`).all(...values);
     },
     userCreatedAt(userId) { return db.prepare('SELECT created_at AS createdAt FROM users WHERE id=?').get(userId)?.createdAt ?? null; },
+    auditUsers() { return db.prepare('SELECT id FROM users ORDER BY id').all().map((row)=>row.id); },
+    auditSnapshot(userId,now) {
+      const row=db.prepare(`SELECT p.lifetime_xp AS lifetimeXp,p.spendable_xp AS spendableXp,p.gamification_start_date AS startDate,
+        COALESCE(SUM(l.lifetime_delta),0) AS ledgerLifetimeXp,COALESCE(SUM(l.balance_delta),0) AS ledgerSpendableXp,
+        COALESCE(SUM(CASE WHEN l.entry_type='ADJUSTMENT' AND l.lifetime_delta>0 THEN l.lifetime_delta ELSE 0 END),0) AS positiveAdjustmentXp
+        FROM users u LEFT JOIN user_progress p ON p.user_id=u.id LEFT JOIN xp_ledger l ON l.user_id=u.id
+        WHERE u.id=? GROUP BY p.user_id`).safeIntegers().get(userId);
+      if(!row)return null;
+      const startDate=row.startDate??this.userCreatedAt(userId)?.slice(0,10)??'9999-12-31';
+      const startMonth=startDate.slice(0,7);
+      const startWeek=db.prepare("SELECT strftime('%G-W%V',?) AS weekKey").get(startDate).weekKey;
+      const counts=db.prepare(`SELECT
+        sum(CASE WHEN period_type='day' AND period_key>=? THEN 1 ELSE 0 END) AS settledDays,
+        sum(CASE WHEN period_type='week' AND period_key>=? THEN 1 ELSE 0 END) AS closedWeeks,
+        sum(CASE WHEN period_type='month' AND period_key>=? THEN 1 ELSE 0 END) AS closedMonths
+        FROM settlements WHERE user_id=?`).get(startDate,startWeek,startMonth,userId);
+      const duplicates=db.prepare(`SELECT count(*) AS count FROM (SELECT entitlement_key,transition_no FROM xp_ledger
+        WHERE user_id=? AND entry_type IN ('AWARD','REINSTATE') AND entitlement_key IS NOT NULL GROUP BY entitlement_key,transition_no HAVING count(*)>1)`).get(userId).count;
+      const expiredHolds=db.prepare(`SELECT count(*) AS count FROM reward_holds WHERE user_id=? AND status='ACTIVE' AND ends_at<=?`).get(userId,now).count;
+      const freezeBalance=db.prepare('SELECT COALESCE(SUM(delta),0) AS total FROM freeze_ledger WHERE user_id=?').safeIntegers().get(userId).total;
+      return {...row,...counts,duplicateAwards:duplicates,expiredHolds,freezeBalance:safeIntegerNumber(freezeBalance),
+        lifetimeXp:safeIntegerNumber(row.lifetimeXp),spendableXp:safeIntegerNumber(row.spendableXp),ledgerLifetimeXp:safeIntegerNumber(row.ledgerLifetimeXp),
+        ledgerSpendableXp:safeIntegerNumber(row.ledgerSpendableXp),positiveAdjustmentXp:safeIntegerNumber(row.positiveAdjustmentXp),
+        settledDays:safeIntegerNumber(counts.settledDays),closedWeeks:safeIntegerNumber(counts.closedWeeks),closedMonths:safeIntegerNumber(counts.closedMonths)};
+    },
+    insertAuditRun({startedAt,finishedAt,checks,failures}) {
+      return Number(db.prepare(`INSERT INTO integrity_audit_runs(started_at,finished_at,checks_json,failures) VALUES(?,?,?,?)`)
+        .run(startedAt,finishedAt,JSON.stringify(checks),failures).lastInsertRowid);
+    },
+    latestAuditRun() { const row=db.prepare('SELECT id,started_at AS startedAt,finished_at AS finishedAt,checks_json AS checksJson,failures FROM integrity_audit_runs ORDER BY id DESC LIMIT 1').get(); return row?{...row,checks:JSON.parse(row.checksJson)}:null; },
     caseById(caseId) { return db.prepare(`SELECT id,user_id AS userId,status,risk_score AS riskScore,distinct_codes AS distinctCodes,opened_at AS openedAt,
       resolved_at AS resolvedAt,resolution,resolved_by AS resolvedBy,appeal_count AS appealCount FROM integrity_cases WHERE id=?`).get(caseId) ?? null; },
     caseActions(caseId) { return db.prepare(`SELECT id,action,actor,note,payload_json AS payloadJson,idempotency_key AS idempotencyKey,created_at AS createdAt

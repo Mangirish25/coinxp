@@ -17,6 +17,7 @@ import { responseLadder } from './integrity/risk.js';
 import { correctionAmnestyPaise, evaluatedSpendPaise, unexpectedExpensePaise } from './integrity/correction.js';
 import { buildBudgetWarnings } from './integrity/warnings.js';
 import { createBudgetService } from '../services/budgetService.js';
+import { theoreticalMaximum, checkTheoreticalCeiling } from './integrity/ceiling.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -638,12 +639,36 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return { expired: expired.length, reconciled: reconciled.length };
   }
 
+  function runIntegrityAudit(userId, { persist = false } = {}) {
+    if(!enabled)return {disabled:true,checks:{},failures:0};
+    if(userId===null||userId===undefined)return integrity.auditUsers().map((id)=>runIntegrityAudit(id,{persist}));
+    const startedAt=nowIso();
+    const snapshot=integrity.auditSnapshot(userId,startedAt);
+    if(!snapshot)return {userId,checks:{userExists:false},failures:1};
+    const theoreticalMaxXp=theoreticalMaximum(snapshot,config);
+    const ceiling=checkTheoreticalCeiling({lifetimeXp:snapshot.lifetimeXp,positiveAdjustmentXp:snapshot.positiveAdjustmentXp,
+      theoreticalMaxXp},config.integrity.ceiling.toleranceXp);
+    const checks={ledgerLifetimeMatchesCache:snapshot.lifetimeXp===snapshot.ledgerLifetimeXp,
+      ledgerSpendableMatchesCache:snapshot.spendableXp===snapshot.ledgerSpendableXp,noDuplicateAwards:snapshot.duplicateAwards===0,
+      noExpiredActiveHolds:snapshot.expiredHolds===0,nonNegativeFreezeInventory:snapshot.freezeBalance>=0,
+      belowTheoreticalXpCeiling:!config.integrity.ceiling.enabled||!ceiling.exceeded};
+    const failures=Object.values(checks).filter((passed)=>!passed).length;
+    if(!checks.belowTheoreticalXpCeiling){
+      try{logger.error?.('Gamification lifetime XP exceeds the configured theoretical ceiling.',{userId,earnedXp:ceiling.earnedXp,maximumXp:ceiling.maximumXp});}catch{/* logger failures are ignored */}
+      if(persist){const timestamp=nowIso();db.transaction(()=>ledger.raiseFlag(userId,'XP_EXCEEDS_THEORETICAL_MAX',localDate(userId),
+        {earnedXp:ceiling.earnedXp,maximumXp:ceiling.maximumXp},timestamp))();}
+    }
+    const result={userId,checks,failures,theoreticalMaxXp,earnedXp:ceiling.earnedXp,maximumXp:ceiling.maximumXp};
+    if(persist)integrity.insertAuditRun({startedAt,finishedAt:nowIso(),checks:result,failures});
+    return result;
+  }
+
   function adjust({userId,delta,reason,actor,allowDemotion=false,caseId=null,reasonCode='ADMIN_ADJUSTMENT'}){
     if(!Number.isSafeInteger(delta)||delta===config.units.zero||!reason?.trim())throw httpError(400,'INVALID_ADJUSTMENT','Provide a non-zero whole XP delta and a reason.');
     if(!actor?.trim()||reason.trim().length<10)throw httpError(400,'ADMIN_REASON_REQUIRED','An admin actor and a note of at least 10 characters are required.');
     const requiresCase=delta<config.units.zero||reasonCode.startsWith('INTEGRITY_');
     if(requiresCase&&(!caseId||!actor?.trim()||reason.trim().length<10))throw httpError(400,'ADMIN_REASON_REQUIRED','Negative or integrity XP changes require a case, actor, and note of at least 10 characters.');
-    return db.transaction(()=>{
+    const result=db.transaction(()=>{
       const progress=ensureProgress(userId);if(!progress)throw httpError(404,'USER_NOT_FOUND','User not found.');
       const reviewCase=requiresCase?integrity.caseById(caseId):null;
       if(requiresCase&&(!reviewCase||reviewCase.userId!==userId||reviewCase.status!=='IN_REVIEW'))throw httpError(409,'CASE_NOT_IN_REVIEW','An owned case in review is required for this adjustment.');
@@ -660,12 +685,14 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
       }
       return ledger.progress(userId);
     })();
+    runIntegrityAudit(userId,{persist:true});
+    return result;
   }
 
   function clawback({userId,caseId,entryIds,actor,note}) {
     if(!Array.isArray(entryIds)||entryIds.length===0||!entryIds.every(Number.isSafeInteger))throw httpError(400,'INVALID_CLAWBACK_ENTRIES','Select one or more ledger entry ids.');
     if(!actor?.trim()||!note?.trim()||note.trim().length<10)throw httpError(400,'ADMIN_REASON_REQUIRED','An admin actor and a note of at least 10 characters are required.');
-    return db.transaction(()=>{
+    const result=db.transaction(()=>{
       const reviewCase=integrity.caseById(caseId);
       if(!reviewCase||reviewCase.userId!==userId)throw httpError(404,'INTEGRITY_CASE_NOT_FOUND','Integrity case not found.');
       if(reviewCase.status!=='IN_REVIEW')throw httpError(409,'CASE_NOT_IN_REVIEW','Only cases in review can be resolved.');
@@ -699,6 +726,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
       integrity.insertNotice({userId,kind:'XP_CHANGE',code:'CLAWBACK_APPLIED',data:{totalXp,dates:planned.map(({entry})=>entry.periodKey)},dedupeKey:`CASE${caseId}:CLAWBACK_NOTICE`,createdAt:now});
       return {applied:true,removedXp:totalXp,entryIds:planned.map(({entry})=>entry.id)};
     })();
+    if(result.applied)runIntegrityAudit(userId,{persist:true});
+    return result;
   }
 
   function requeueDead(userId=null){return outbox.requeueDead(userId);}
@@ -710,7 +739,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   }
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
-    publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
+    publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory}};
 }
 

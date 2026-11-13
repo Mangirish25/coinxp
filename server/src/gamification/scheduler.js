@@ -8,6 +8,7 @@ export function startGamificationScheduler(engine, { db, streakAdvancer, clock =
   let running = false;
   let stopped = false;
   let lastReconciliation = 0;
+  let lastAudit = 0;
   async function tick() {
     if (running || stopped || !engine.enabled) return;
     running = true;
@@ -26,6 +27,11 @@ export function startGamificationScheduler(engine, { db, streakAdvancer, clock =
           engine.reconcileRange(user.id, shiftDate(today, -rules.events.reconciliationDays), today);
         }
         lastReconciliation = clock.now().getTime();
+      }
+      const auditInterval = rules.integrity.audit.intervalHours * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
+      if (clock.now().getTime() - lastAudit >= auditInterval) {
+        for (const user of users) engine.runIntegrityAudit?.(user.id,{persist:true});
+        lastAudit = clock.now().getTime();
       }
       const cutoff = new Date(clock.now().getTime() - rules.events.retentionDays * rules.units.hoursPerDay * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond).toISOString();
       outbox.purgeProcessed(cutoff);

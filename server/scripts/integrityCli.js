@@ -24,12 +24,18 @@ try {
   } else if(area==='score'){
     const userId=Number(option('user'));if(!Number.isSafeInteger(userId)||userId<1)throw new Error('Usage: integrityCli.js score --user <id>');
     print(service.score(userId));
+  } else if(area==='audit') {
+    const userOption=option('user');const userId=userOption?Number(userOption):null;
+    if(userOption&&(!Number.isSafeInteger(userId)||userId<1))throw new Error('Usage: integrityCli.js audit [--user <id>] [--apply]');
+    const result=engine.runIntegrityAudit(userId,{persist:apply});
+    print(apply?result:{dryRun:true,result});
   } else if(area==='flags'&&command==='list'){
     print(service.listFlags({userId:option('user')?Number(option('user')):null,code:option('code')}));
   } else if(area==='cases'&&['resolve','note','extend-hold','release-hold'].includes(command)){
     const caseId=Number(args.find((value)=>/^\d+$/.test(value)));
     const action=command==='note'?'NOTE':command==='extend-hold'?'HOLD_EXTENDED':command==='release-hold'?'RELEASE_HOLD':option('action');
-    const input={caseId,action,actor:option('actor'),note:option('note'),days:option('days')?Number(option('days')):undefined};
+    const entryIds=option('entries')?.split(',').map((value)=>Number(value.trim()));
+    const input={caseId,action,actor:option('actor'),note:option('note'),days:option('days')?Number(option('days')):undefined,entryIds};
     if(!caseId||!action)throw new Error('Case id and --action are required.');
     print(apply?service.applyCaseAction(input):{dryRun:true,command, ...input});
   } else if(area==='flags'&&command==='dismiss'){
@@ -37,6 +43,6 @@ try {
     const input={flagId,actor:option('actor'),note:option('note')};
     print(apply?service.dismissFlag(input):{dryRun:true,command,...input});
   } else {
-    throw new Error('Usage: integrityCli.js cases <list|show|resolve|note|extend-hold|release-hold> | flags <list|dismiss> | score --user <id> [--apply]');
+    throw new Error('Usage: integrityCli.js cases <list|show|resolve|note|extend-hold|release-hold> | flags <list|dismiss> | score --user <id> [--apply] | audit [--user <id>] [--apply]');
   }
 } finally { db.close(); }
