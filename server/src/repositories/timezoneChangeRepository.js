@@ -14,5 +14,9 @@ export function createTimezoneChangeRepository(db) {
       return db.prepare(`SELECT count(*) AS count FROM timezone_changes changes,json_each(changes.skipped_dates_json) skipped
         WHERE changes.user_id=? AND changes.changed_at>=?`).get(userId, since).count;
     },
+    countSkippedBetween(userId, afterDate, beforeDate) {
+      return db.prepare(`SELECT count(*) AS count FROM timezone_changes changes,json_each(changes.skipped_dates_json) skipped
+        WHERE changes.user_id=? AND skipped.value>? AND skipped.value<?`).get(userId, afterDate, beforeDate).count;
+    },
   };
 }

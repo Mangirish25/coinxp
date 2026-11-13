@@ -146,8 +146,10 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       const inventory = freezes.inventoryAsOf(userId, cutoff);
       const prior = streaks.previousRun(userId, TRACKING);
       const exempt = exemptions.isExempt(userId, date);
+      const calendarGap = prior?.endedKey ? dateDistance(prior.endedKey, date, config.units) : config.units.zero;
+      const exemptGap = prior?.endedKey ? timezoneChanges.countSkippedBetween(userId, prior.endedKey, date) : config.units.zero;
       state = transitionDay(userId, date, user, state, { tracked: Boolean(settlement?.details?.xpTracked), exempt,
-        reasonCode: 'TIMEZONE_GAP', freezeInventory: inventory, gapDays: prior?.endedKey ? dateDistance(prior.endedKey, date, config.units) : config.units.zero });
+        reasonCode: 'TIMEZONE_GAP', freezeInventory: inventory, gapDays: calendarGap - exemptGap });
       const timezoneSince = new Date(clock.now().getTime() - config.streaks.antiAbuse.timezoneWindowDays * config.units.hoursPerDay *
         config.units.minutesPerHour * config.units.secondsPerMinute * config.units.millisecondsPerSecond).toISOString();
       const exemptionCount = timezoneChanges.countSkippedSince(userId, timezoneSince);
@@ -234,11 +236,12 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
     const freezeCount = freezes.inventoryAsOf(userId, clock.now().toISOString());
     const atRisk = active && !trackedToday && localHour >= config.streaks.atRisk.localHour;
     const settlingDate = localHour < config.settlement.cutoffLocalHour ? shiftDate(today, -config.units.one) : null;
-    const nextMilestone = config.streaks.tracking.milestones.find((milestone) => milestone.days > stored.currentLength) ?? null;
+    const reachedMilestones = new Set(streaks.milestones(userId, TRACKING));
+    const nextMilestone = config.streaks.tracking.milestones.find((milestone) => !reachedMilestones.has(milestone.days)) ?? null;
     return { tracking: { status: stored.status, current: stored.currentLength, longest: stored.longestLength, trackedToday, atRisk,
       freezeWouldProtect: active && stored.currentLength >= config.streaks.tracking.minRunLengthForFreeze &&
         stored.consecutiveFrozen < config.streaks.tracking.freeze.maxConsecutiveFrozen && freezeCount > 0,
-      settlingDate, nextMilestone, comeback: run?.comebackJson ? JSON.parse(run.comebackJson) : null },
+      settlingDate, nextMilestone, milestones: [...reachedMilestones], comeback: run?.comebackJson ? JSON.parse(run.comebackJson) : null },
       secondary: Object.fromEntries(SECONDARY.map((type) => {
         const row = streaks.ensureState(userId, type, iso(clock));
         return [type, { status: row.status, current: row.currentLength, longest: row.longestLength }];

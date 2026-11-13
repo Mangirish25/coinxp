@@ -10,6 +10,7 @@ export interface StreakSummary {
     freezeWouldProtect: boolean;
     settlingDate: string | null;
     nextMilestone: { days: number; xp: number } | null;
+    milestones: number[];
     comeback: { priorLength: number; afterCountedDays: number; sourceRunId: number; remainingDays: number } | null;
   };
   secondary: Record<string, { status: string; current: number; longest: number }>;

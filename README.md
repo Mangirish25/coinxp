@@ -188,7 +188,7 @@ Authenticated endpoints:
 | `GET` | `/api/streaks` | Settle/advance and return tracking status, secondary chains, freeze inventory, at-risk state, next milestone, and recent streak events |
 | `GET` | `/api/streaks/tracking/calendar?from=&to=` | Zero-filled daily statuses and secondary chain statuses; maximum 366 dates |
 | `GET` | `/api/streaks/freezes?page=&pageSize=` | Owner-scoped freeze balance and append-only ledger history |
-| `GET` | `/api/streaks/rules` | Public streak configuration (route is authenticated with the other streak endpoints) |
+| `GET` | `/api/streaks/rules` | Streak configuration for the signed-in client |
 
 Migration `005_streaks.sql` adds runs, state, periods, milestones, the append-only freeze ledger, and timezone-change history. Migration `006_streak_comeback_state.sql` persists comeback progress and the rule version for each run/period. Dashboard transactions, budgets, daily-review, and timezone mutations invalidate the streak query cache. `/streaks` includes the month calendar, milestones, secondary streaks, and freeze history. Streak events are stored as `PUBLISHED` Part 6 outbox rows with per-event dedupe keys and are presented once per browser session.
 

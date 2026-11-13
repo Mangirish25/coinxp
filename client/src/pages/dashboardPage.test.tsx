@@ -98,7 +98,7 @@ function setup(breakdownFails = false) {
       if (url.includes('/api/gamification/daily-review/today'))
         return { ok: true, status: 200, json: async () => ({ localDate: '2026-11-07', completed: false, available: false, blockers: [], trackingCredited: false, noSpendCapRemaining: 2, hasExpense: false }) };
       if (url.endsWith('/api/streaks'))
-        return { ok: true, status: 200, json: async () => ({ tracking: { status: 'NONE', current: 0, longest: 0, trackedToday: false, atRisk: false, freezeWouldProtect: false, settlingDate: null, nextMilestone: { days: 3, xp: 10 }, comeback: null }, secondary: {}, freezes: { inventory: 0, cap: 2 }, through: '2026-11-06', recentEvents: [] }) };
+        return { ok: true, status: 200, json: async () => ({ tracking: { status: 'NONE', current: 0, longest: 0, trackedToday: false, atRisk: false, freezeWouldProtect: false, settlingDate: null, nextMilestone: { days: 3, xp: 10 }, milestones: [], comeback: null }, secondary: {}, freezes: { inventory: 0, cap: 2 }, through: '2026-11-06', recentEvents: [] }) };
       if (url.includes('category-breakdown'))
         return breakdownFails
           ? {

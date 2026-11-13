@@ -17,6 +17,7 @@ describe('STR-008 timezone history', () => {
       oldLocalDate: '2026-01-02', newLocalDate: '2026-01-04', skippedDates: ['2026-01-03'] });
     expect(changes.list(userId)[0].skippedDates).toEqual(['2026-01-03']);
     expect(changes.countSkippedSince(userId, '2026-01-01T00:00:00.000Z')).toBe(1);
+    expect(changes.countSkippedBetween(userId, '2026-01-02', '2026-01-04')).toBe(1);
     expect(() => db.prepare('DELETE FROM timezone_changes WHERE user_id=?').run(userId)).toThrow(/append-only/);
   });
 });

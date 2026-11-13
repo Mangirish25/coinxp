@@ -20,7 +20,7 @@ describe('StreaksPage', () => {
       const body = url.endsWith('/api/auth/me')
         ? { id: 1, email: 'streak@example.com', displayName: 'Streak user', timezone: 'Asia/Kolkata', createdAt: '2026-01-01T00:00:00.000Z' }
         : url.endsWith('/api/streaks')
-          ? { tracking: { status: 'ACTIVE', current: 3, longest: 7, trackedToday: true, atRisk: false, freezeWouldProtect: true, settlingDate: null, nextMilestone: { days: 7, xp: 25 }, comeback: null }, secondary: {}, freezes: { inventory: 1, cap: 2 }, through: date }
+          ? { tracking: { status: 'ACTIVE', current: 3, longest: 7, trackedToday: true, atRisk: false, freezeWouldProtect: true, settlingDate: null, nextMilestone: { days: 7, xp: 25 }, milestones: [3], comeback: null }, secondary: {}, freezes: { inventory: 1, cap: 2 }, through: date, recentEvents: [] }
           : url.includes('/tracking/calendar')
             ? { from: first, to: url.match(/to=([^&]+)/)?.[1], days: [{ date: first, status: 'COUNTED', secondary: {} }] }
             : url.includes('/freezes') ? { inventory: 1, cap: 2, data: [{ id: 1, delta: 1, reason: 'STARTER', effectiveAt: '2026-01-03T00:00:00.000Z', effectiveLocalDate: first, message: 'Starter freeze earned' }], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }

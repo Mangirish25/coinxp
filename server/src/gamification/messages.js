@@ -6,6 +6,7 @@ const templates = Object.freeze({
   DAILY_ADHERENCE: 'Your tracked spending stayed within the daily limit set for that day.',
   WEEKLY_CONSISTENCY: 'You tracked money on enough eligible days this week.',
   MONTHLY_BUDGET_COMPLETION: 'Your tracked spending stayed within the monthly budget set at the start of the month.',
+  STREAK_MILESTONE: 'You reached a tracking streak milestone.',
   FIRST_TRANSACTION: 'You recorded your first qualifying transaction.',
   FIRST_BUDGET: 'You set your first budget.',
   FIRST_REVIEW: 'You completed your first daily review.',
