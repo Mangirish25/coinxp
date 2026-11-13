@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Flame, Snowflake } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -5,7 +6,22 @@ import { streakApi } from '../services/streakApi';
 
 export function StreakSummaryCard() {
   const query = useQuery({ queryKey: ['streaks', 'summary'], queryFn: streakApi.summary });
-  if (query.isLoading) return <div className="h-24 animate-pulse rounded-2xl bg-white" aria-label="Loading streak summary" />;
+  useEffect(() => {
+    for (const entry of query.data?.recentEvents ?? []) {
+      const date = typeof entry.data.date === 'string' ? entry.data.date : '';
+      const milestone = typeof entry.data.milestone === 'number' ? entry.data.milestone : 0;
+      const toLength = typeof entry.data.toLength === 'number' ? entry.data.toLength : 0;
+      const messages: Record<string, string> = {
+        STREAK_FREEZE_USED: `A freeze protected your streak on ${date}.`,
+        STREAK_BROKEN: 'Your tracking streak ended. Start again when you are ready.',
+        STREAK_MILESTONE_REACHED: `You reached the ${milestone}-day tracking milestone.`,
+        STREAK_RESTORED: `Comeback complete. Your streak recovered to ${toLength} days.`,
+      };
+      const text = messages[entry.eventType];
+      if (text) window.dispatchEvent(new CustomEvent('coinxp:streak-toast', { detail: { eventId: entry.eventId, text } }));
+    }
+  }, [query.data?.recentEvents]);
+  if (query.isLoading) return <div className="h-24 animate-pulse motion-reduce:animate-none rounded-2xl bg-white" aria-label="Loading streak summary" />;
   if (query.isError || !query.data) return <section className="rounded-2xl border bg-white p-5"><p>Streak summary is temporarily unavailable.</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Retry</button></section>;
   const { tracking, freezes } = query.data;
   return <section aria-label="Streak summary" className="rounded-2xl border border-brand-100 bg-white p-5 shadow-sm">

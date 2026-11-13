@@ -1,6 +1,6 @@
 # CoinXP
 
-CoinXP is a personal finance web app designed to grow into a habit-building product. It includes the project foundation, cookie-based authentication, transaction and category management, budgets, an on-demand dashboard with analytics and monthly reports, and a reversible XP economy. Streaks, rewards, and other later gamification features remain future work.
+CoinXP is a personal finance web app designed to grow into a habit-building product. It includes the project foundation, cookie-based authentication, transaction and category management, budgets, an on-demand dashboard with analytics and monthly reports, a reversible XP economy, and the first streak engine with freezes and comeback recovery.
 
 ## Structure
 
@@ -14,7 +14,7 @@ coinxp/
 │   ├── middleware/
 │   ├── services/     # application use cases
 │   ├── repositories/ # SQL access
-│   ├── gamification/ # future isolated subsystem scaffold
+│   ├── gamification/ # XP engine, pure streak transitions, settlement integration
 │   ├── db/           # connection, migrations, migration runner
 │   ├── utils/
 │   ├── app.js        # testable Express app; does not listen
@@ -26,7 +26,7 @@ coinxp/
 
 Request flow is **routes → controllers → services → repositories → db**. Controllers do not execute SQL. Repositories are the only layer where SQL belongs. `app.js` builds the Express app without opening a listener so it can be exercised with Supertest.
 
-Financial operations must never fail because gamification failed. Transaction events from Part 3 call a guarded placeholder only after commit; Part 5 adds no gamification events or behavior.
+Financial operations must never fail because gamification failed. Financial events are committed with the financial write and consumed after commit. Streak state advances from immutable Part 6 settlements and writes only gamification tables, its freeze ledger, output events, and milestone XP.
 
 Every authenticated endpoint uses `requireAuth`; transaction and audit repository operations also scope reads and writes by the authenticated user ID. Add this guard to every future protected route.
 
@@ -116,7 +116,7 @@ Analytics are derived on demand from non-deleted transactions. SQL performs the 
 
 `server/src/services/analyticsCalculator.js` contains framework-free rounding, comparisons, averages, calendar zero-fill, and day selection. Category shares use the largest-remainder method: each category first receives its integer basis-point floor, then remaining basis points are assigned by descending fractional remainder with a stable category-ID tie break. This guarantees category shares sum to exactly 10,000 basis points (100%). Percentages are derived from integer paise and rounded only at output boundaries.
 
-The dashboard summary executes a fixed 11 SQL queries: one initial timezone lookup and three analytics reads, four monthly budget-status lookups, and three daily-status lookups. It does not issue per-category or per-transaction queries. The dashboard includes the live XP summary card introduced in Part 6; streaks, freezes, badges, challenges, rewards, and penalties remain reserved for later parts.
+The dashboard summary executes a fixed 11 SQL queries: one initial timezone lookup and three analytics reads, four monthly budget-status lookups, and three daily-status lookups. It does not issue per-category or per-transaction queries. The dashboard includes the live XP and streak summary cards introduced in Parts 6 and 7; badges, challenges, rewards, and penalties remain reserved for later parts.
 
 The standalone benchmark is `npm run perf:analytics`. It seeds 20,000 in-memory transactions and times each dashboard/analytics endpoint; it is separate from the normal test suite. On the local run during implementation: summary 40.0 ms, category breakdown 8.5 ms, daily spending 5.4 ms, income vs expense 9.5 ms, and monthly report 15.5 ms. These are single-run local timings, not service-level targets.
 
@@ -171,7 +171,26 @@ Authenticated endpoints:
 
 The dashboard XP card offers the daily review. `/xp` shows level progress and ledger history. The UI displays XP change toasts from successful events. Timezone changes update future local-day calculations; transaction creation also records `created_local_date` and `created_tz` so XP-001 eligibility does not drift when a user later changes timezone. Existing rows receive NULL creation-date metadata from migration `004`; they remain part of financial totals but do not qualify for XP-001.
 
-Anti-abuse indicators are stored in `gamification_flags`: rapid entitlement churn, bulk backfill, four or more timezone changes within 30 days, and monthly budgets raised after a failed month are review flags only. Timezone changes are also limited by the configured seven-day cooldown after the first change. No XP penalty is applied. There is no streak, freeze, badge, reward, challenge, or social behavior in Part 6.
+Anti-abuse indicators are stored in `gamification_flags`: rapid entitlement churn, bulk backfill, four or more timezone changes within 30 days, and monthly budgets raised after a failed month are review flags only. Timezone changes are also limited by the configured seven-day cooldown after the first change. No XP penalty is applied. Part 6 itself does not implement streak, freeze, badge, reward, challenge, or social behavior.
+
+## Part 7: Streak engine
+
+The streak engine consumes the Part 6 day settlement's `details.xpTracked` value as its only definition of a tracking day. `tracked` and `xpTracked` are both included in settlement details and the `DAY_SETTLED` event; a capped no-spend declaration can remain declared for the calendar but does not extend a streak. The timezone-change history records old/new zones and local dates in the same database transaction as the timezone update. Only local date labels strictly between the old and new local dates are exempt; historical streak periods are never rewritten by a timezone change or later transaction edit.
+
+The pure transition functions live in `server/src/gamification/streaks/streakEngine.js`. The orchestrator settles Part 6 first, then processes closed dates in ascending order. Each date is committed independently with its period, run/state update, freeze ledger changes, published output events, and any milestone XP entitlement. Unique keys plus `BEGIN IMMEDIATE` make concurrent reads and scheduler catch-up idempotent. `STREAK_MILESTONE_REACHED` awards use a `once` XP entitlement, so they are outside the Part 6 daily XP cap and cannot be farmed by restarting a streak.
+
+Recommended proposed defaults from the Part 7 spec are in `server/src/gamification/rules.config.js`: one starter freeze at three counted days, one more every 14 counted days, two held and two consecutive freeze uses maximum; comeback after three consecutive counted days within a three-label gap, restoring 50% of a prior run of at least 10 days, with 14 genuine counted days required before another comeback. Milestone XP is one-time per milestone per account. Secondary daily-budget, weekly-consistency, and monthly-budget chains are display-only and do not award XP. Anti-abuse signals (`NOSPEND_PATTERN`, `TZ_EXEMPT_REPEAT`, `FREEZE_USED_RAPID`) are informational flags only.
+
+Authenticated endpoints:
+
+| Method | Endpoint | Behavior |
+| ------ | -------- | -------- |
+| `GET` | `/api/streaks` | Settle/advance and return tracking status, secondary chains, freeze inventory, at-risk state, next milestone, and recent streak events |
+| `GET` | `/api/streaks/tracking/calendar?from=&to=` | Zero-filled daily statuses and secondary chain statuses; maximum 366 dates |
+| `GET` | `/api/streaks/freezes?page=&pageSize=` | Owner-scoped freeze balance and append-only ledger history |
+| `GET` | `/api/streaks/rules` | Public streak configuration (route is authenticated with the other streak endpoints) |
+
+Migration `005_streaks.sql` adds runs, state, periods, milestones, the append-only freeze ledger, and timezone-change history. Migration `006_streak_comeback_state.sql` persists comeback progress and the rule version for each run/period. Dashboard transactions, budgets, daily-review, and timezone mutations invalidate the streak query cache. `/streaks` includes the month calendar, milestones, secondary streaks, and freeze history. Streak events are stored as `PUBLISHED` Part 6 outbox rows with per-event dedupe keys and are presented once per browser session.
 
 Local operations (all administrative commands are dry-run unless `--apply` is provided):
 

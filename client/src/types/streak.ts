@@ -15,6 +15,7 @@ export interface StreakSummary {
   secondary: Record<string, { status: string; current: number; longest: number }>;
   freezes: { inventory: number; cap: number };
   through: string;
+  recentEvents: Array<{ eventId: string; eventType: string; occurredAt: string; data: Record<string, unknown> }>;
 }
 
 export interface StreakCalendar {
