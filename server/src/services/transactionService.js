@@ -1,13 +1,14 @@
-import { handleEvent as defaultHandleEvent } from '../gamification/index.js';
 import { GAMIFICATION_EVENTS } from '../gamification/events.js';
 import { TRANSACTION_CONFIG } from '../config/transactionConstants.js';
 import { createAuditRepository } from '../repositories/auditRepository.js';
 import { createCategoryRepository } from '../repositories/categoryRepository.js';
 import { createTransactionRepository } from '../repositories/transactionRepository.js';
 import { createUserRepository } from '../repositories/userRepository.js';
-import { nowIso, todayInTimezone } from '../utils/dates.js';
 import { httpError } from '../utils/httpError.js';
 import { paiseToRupees } from '../utils/money.js';
+import { localDateAt } from '../gamification/dateMath.js';
+import { createHash } from 'node:crypto';
+import { createRequestIdempotencyRepository } from '../repositories/requestIdempotencyRepository.js';
 
 const CHANGEABLE_FIELDS = ['type', 'amountPaise', 'categoryId', 'description', 'transactionDate'];
 
@@ -28,6 +29,8 @@ function publicTransaction(row) {
     categoryName: row.categoryName,
     categoryIcon: row.categoryIcon,
     categoryType: row.categoryType,
+    createdLocalDate: row.createdLocalDate,
+    createdTimezone: row.createdTimezone,
   };
 }
 
@@ -39,8 +42,8 @@ function shiftDate(dateString, { days = 0, years = 0 } = {}) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
-function validateTransactionDate(transactionDate, timezone) {
-  const today = todayInTimezone(timezone);
+function validateTransactionDate(transactionDate, timezone, instant = new Date()) {
+  const today = localDateAt(instant, timezone);
   if (transactionDate > shiftDate(today, { days: TRANSACTION_CONFIG.futureDateDays })) {
     throw httpError(
       422,
@@ -84,15 +87,19 @@ function eventSummary(transaction) {
 
 export function createTransactionService({
   db,
-  eventHandler = defaultHandleEvent,
+  eventHandler,
+  gameEngine,
   logger = console,
 }) {
   const transactions = createTransactionRepository(db);
   const audits = createAuditRepository(db);
   const categories = createCategoryRepository(db);
   const users = createUserRepository(db);
+  const idempotency = createRequestIdempotencyRepository(db);
+  const currentIso = () => (gameEngine?.clock.now() ?? new Date()).toISOString();
 
   async function emitSafely(event) {
+    if (!eventHandler) return;
     try {
       await eventHandler(event);
     } catch (error) {
@@ -116,18 +123,46 @@ export function createTransactionService({
     return timezone;
   }
 
+  function enqueue(eventType, userId, timezone, date, data) {
+    return gameEngine?.enqueue({ eventType, userId, timezone, localDate: date, occurredAt: currentIso(), data });
+  }
+
+  async function processCommitted(userId, eventType, data, date, timezone) {
+    if (gameEngine) {
+      try {
+        const result = gameEngine.processUser(userId);
+        await emitSafely({ event: eventType, userId, data, timestamp: currentIso(), localDate: date, timezone });
+        return result;
+      }
+      catch (error) { try { logger.error?.(`Gamification processing failed for ${eventType}.`, error); } catch { /* logger failures are ignored */ } return null; }
+    }
+    await emitSafely({ event: eventType, userId, data, timestamp: currentIso(), localDate: date, timezone });
+    return null;
+  }
+
   return {
-    async create(userId, body) {
+    async create(userId, body, idempotencyKey) {
+      const requestHash = idempotencyKey ? createHash('sha256').update(JSON.stringify(body)).digest('hex') : null;
+      if (idempotencyKey) {
+        const previous = idempotency.find(userId, idempotencyKey);
+        if (previous) {
+          if (previous.requestHash !== requestHash) throw httpError(422, 'IDEMPOTENCY_KEY_REUSED', 'This Idempotency-Key was already used with a different request.');
+          return { transaction: previous.response, status: 200 };
+        }
+      }
       const timezone = requireTimezone(userId);
-      validateTransactionDate(body.transactionDate, timezone);
+      validateTransactionDate(body.transactionDate, timezone, gameEngine?.clock.now() ?? new Date());
       validateCategory(categories, userId, body.categoryId, body.type);
-      const createdAt = nowIso();
+      const createdAt = currentIso();
+      const createdLocalDate = localDateAt(new Date(createdAt), timezone);
       const committed = db.transaction(() => {
         const id = transactions.create({
           ...body,
           description: body.description?.trim() || null,
           userId,
           createdAt,
+          createdLocalDate,
+          createdTimezone: timezone,
         });
         const after = publicTransaction(transactions.findByIdForUser(userId, id));
         audits.insert({
@@ -140,16 +175,12 @@ export function createTransactionService({
           reason: null,
           createdAt,
         });
+        enqueue('TRANSACTION_CREATED', userId, timezone, createdLocalDate, { transactionId: id, after });
+        if (idempotencyKey) idempotency.insert({ userId, key: idempotencyKey, requestHash, responseStatus: 201, response: after, createdAt });
         return after;
       })();
-
-      await emitSafely({
-        event: GAMIFICATION_EVENTS.TRANSACTION_CREATED,
-        userId,
-        data: eventSummary(committed),
-        timestamp: nowIso(),
-      });
-      return committed;
+      const gamification = await processCommitted(userId, GAMIFICATION_EVENTS.TRANSACTION_CREATED, eventSummary(committed), createdLocalDate, timezone);
+      return { transaction: { ...committed, gamification }, status: 201 };
     },
 
     list(userId, filters) {
@@ -184,7 +215,7 @@ export function createTransactionService({
         const targetCategoryId = body.categoryId ?? current.categoryId;
         const targetDate = body.transactionDate ?? current.transactionDate;
         validateCategory(categories, userId, targetCategoryId, targetType);
-        validateTransactionDate(targetDate, timezone);
+        validateTransactionDate(targetDate, timezone, gameEngine?.clock.now() ?? new Date());
 
         const desired = {
           type: targetType,
@@ -205,7 +236,7 @@ export function createTransactionService({
           return { transaction: publicTransaction(current), before: null, changedFields: [] };
 
         const before = publicTransaction(current);
-        const updatedAt = nowIso();
+        const updatedAt = currentIso();
         transactions.updateOwned({ userId, id: transactionId, changes: changed, updatedAt });
         const after = publicTransaction(transactions.findByIdForUser(userId, transactionId));
         audits.insert({
@@ -218,23 +249,20 @@ export function createTransactionService({
           reason: auditReason(body.reason),
           createdAt: updatedAt,
         });
+        enqueue('TRANSACTION_UPDATED', userId, timezone, localDateAt(new Date(updatedAt), timezone), {
+          transactionId, before, after, changedFields,
+        });
         return { transaction: after, before, changedFields };
       })();
 
+      let gamification = null;
       if (committed.changedFields.length) {
-        await emitSafely({
-          event: GAMIFICATION_EVENTS.TRANSACTION_UPDATED,
-          userId,
-          data: {
-            ...eventSummary(committed.transaction),
-            changedFields: committed.changedFields,
-            before: eventSummary(committed.before),
-            after: eventSummary(committed.transaction),
-          },
-          timestamp: nowIso(),
-        });
+        gamification = await processCommitted(userId, GAMIFICATION_EVENTS.TRANSACTION_UPDATED, {
+          ...eventSummary(committed.transaction), changedFields: committed.changedFields,
+          before: eventSummary(committed.before), after: eventSummary(committed.transaction),
+        }, committed.transaction.createdLocalDate ?? committed.transaction.transactionDate, requireTimezone(userId));
       }
-      return committed.transaction;
+      return { ...committed.transaction, ...(committed.changedFields.length ? { gamification } : {}) };
     },
 
     async delete(userId, transactionId) {
@@ -243,7 +271,7 @@ export function createTransactionService({
         if (current.deletedAt)
           throw httpError(404, 'TRANSACTION_NOT_FOUND', 'Transaction not found.');
         const before = publicTransaction(current);
-        const deletedAt = nowIso();
+        const deletedAt = currentIso();
         transactions.softDelete({ userId, id: transactionId, deletedAt });
         audits.insert({
           transactionId,
@@ -255,25 +283,22 @@ export function createTransactionService({
           reason: null,
           createdAt: deletedAt,
         });
+        enqueue('TRANSACTION_DELETED', userId, requireTimezone(userId), localDateAt(new Date(deletedAt), requireTimezone(userId)), { transactionId, before });
         return before;
       })();
 
-      await emitSafely({
-        event: GAMIFICATION_EVENTS.TRANSACTION_DELETED,
-        userId,
-        data: eventSummary(committed),
-        timestamp: nowIso(),
-      });
+      await processCommitted(userId, GAMIFICATION_EVENTS.TRANSACTION_DELETED, eventSummary(committed), committed.transactionDate, requireTimezone(userId));
     },
 
-    restore(userId, transactionId) {
-      return db.transaction(() => {
+    async restore(userId, transactionId) {
+      const timezone = requireTimezone(userId);
+      const committed = db.transaction(() => {
         const current = requireOwned(userId, transactionId, true);
         if (!current.deletedAt) {
           throw httpError(409, 'TRANSACTION_NOT_DELETED', 'This transaction is not deleted.');
         }
         const before = publicTransaction(current);
-        const restoredAt = nowIso();
+        const restoredAt = currentIso();
         categories.restoreForTransaction(userId, current.categoryId);
         transactions.restore({ userId, id: transactionId, updatedAt: restoredAt });
         const after = publicTransaction(transactions.findByIdForUser(userId, transactionId));
@@ -287,8 +312,11 @@ export function createTransactionService({
           reason: null,
           createdAt: restoredAt,
         });
+        enqueue('TRANSACTION_RESTORED', userId, timezone, localDateAt(new Date(restoredAt), timezone), { transactionId, before, after });
         return after;
       })();
+      const gamification = await processCommitted(userId, GAMIFICATION_EVENTS.TRANSACTION_RESTORED, eventSummary(committed), committed.transactionDate, timezone);
+      return { ...committed, gamification };
     },
 
     history(userId, transactionId) {

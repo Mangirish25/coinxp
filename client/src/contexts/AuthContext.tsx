@@ -15,6 +15,7 @@ interface AuthContextValue {
   login: (input: Pick<RegisterInput, 'email' | 'password'>) => Promise<PublicUser>;
   register: (input: RegisterInput) => Promise<PublicUser>;
   logout: () => Promise<void>;
+  changeTimezone: (timezone: string) => Promise<PublicUser>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,9 +59,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const changeTimezone = useCallback(async (timezone: string) => {
+    const updated = await apiFetch<PublicUser>('/api/auth/timezone', { method: 'PATCH', body: JSON.stringify({ timezone }) });
+    setUser(updated);
+    return updated;
+  }, []);
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout }),
-    [user, loading, login, register, logout],
+    () => ({ user, loading, login, register, logout, changeTimezone }),
+    [user, loading, login, register, logout, changeTimezone],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

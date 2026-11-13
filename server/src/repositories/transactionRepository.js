@@ -9,6 +9,7 @@ const SELECT_TRANSACTIONS = `
     t.amount_paise AS amountPaise, t.description,
     t.transaction_date AS transactionDate, t.created_at AS createdAt,
     t.updated_at AS updatedAt, t.deleted_at AS deletedAt,
+    t.created_local_date AS createdLocalDate, t.created_tz AS createdTimezone,
     c.name AS categoryName, c.icon AS categoryIcon, c.type AS categoryType
   FROM transactions t
   JOIN categories c ON c.id = t.category_id AND (c.user_id IS NULL OR c.user_id = t.user_id)
@@ -53,13 +54,13 @@ export function createTransactionRepository(db) {
   const byIdStatement = db.prepare(`${SELECT_TRANSACTIONS}
     WHERE t.id = ? AND t.user_id = ? AND (t.deleted_at IS NULL OR ? = 1)`);
   const insertStatement = db.prepare(`INSERT INTO transactions
-    (user_id, category_id, type, amount_paise, description, transaction_date, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    (user_id, category_id, type, amount_paise, description, transaction_date, created_at, updated_at, created_local_date, created_tz)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   return {
     findByIdForUser(userId, id, includeDeleted = false) {
       return byIdStatement.get(id, userId, includeDeleted ? 1 : 0);
     },
-    create({ userId, categoryId, type, amountPaise, description, transactionDate, createdAt }) {
+    create({ userId, categoryId, type, amountPaise, description, transactionDate, createdAt, createdLocalDate = null, createdTimezone = null }) {
       const result = insertStatement.run(
         userId,
         categoryId,
@@ -69,6 +70,8 @@ export function createTransactionRepository(db) {
         transactionDate,
         createdAt,
         createdAt,
+        createdLocalDate,
+        createdTimezone,
       );
       return Number(result.lastInsertRowid);
     },
@@ -152,6 +155,38 @@ export function createTransactionRepository(db) {
         .safeIntegers()
         .get(userId, date, date);
       return safePaiseNumber(row.spentPaise);
+    },
+    liveCountForDate(userId, date, minimumPaise) {
+      return db.prepare(`SELECT count(*) AS count FROM transactions WHERE user_id=? AND deleted_at IS NULL
+        AND transaction_date=? AND created_local_date=? AND amount_paise>=?`).get(userId,date,date,minimumPaise).count;
+    },
+    currentExpenseFacts(userId, from, to) {
+      return db.prepare(`SELECT transaction_date AS transactionDate,COALESCE(SUM(amount_paise),0) AS spentPaise,
+        count(*) AS transactionCount FROM transactions WHERE user_id=? AND deleted_at IS NULL AND type='expense'
+        AND transaction_date>=? AND transaction_date<=? GROUP BY transaction_date ORDER BY transaction_date`)
+        .safeIntegers().all(userId,from,to).map((row)=>({...row,spentPaise:safePaiseNumber(row.spentPaise)}));
+    },
+    auditRowsAsOf(userId, fromInstant) {
+      return db.prepare(`SELECT a.transaction_id AS transactionId,a.action,a.before_json AS beforeJson,a.after_json AS afterJson,
+        a.created_at AS createdAt,a.id FROM transaction_audit a JOIN transactions t ON t.id=a.transaction_id
+        WHERE a.user_id=? AND t.user_id=? AND a.created_at<=? ORDER BY a.transaction_id,a.created_at,a.id`)
+        .all(userId,userId,fromInstant).map((row)=>({...row,
+          before:row.beforeJson===null?null:JSON.parse(row.beforeJson),
+          after:row.afterJson===null?null:JSON.parse(row.afterJson),
+        }));
+    },
+    currentExpenseTotal(userId, from, to) {
+      const row=db.prepare(`SELECT COALESCE(SUM(amount_paise),0) AS amount FROM transactions WHERE user_id=? AND type='expense'
+        AND deleted_at IS NULL AND transaction_date>=? AND transaction_date<=?`).safeIntegers().get(userId,from,to);
+      return safePaiseNumber(row.amount);
+    },
+    countExpensesForDate(userId, date) {
+      return db.prepare(`SELECT count(*) AS count FROM transactions WHERE user_id=? AND deleted_at IS NULL
+        AND type='expense' AND transaction_date=?`).get(userId,date).count;
+    },
+    countNonLiveCreatedSince(userId, since, minimumPaise) {
+      return db.prepare(`SELECT count(*) AS count FROM transactions WHERE user_id=? AND created_at>=? AND created_local_date IS NOT NULL
+        AND created_local_date<>transaction_date AND amount_paise>=?`).get(userId,since,minimumPaise).count;
     },
   };
 }

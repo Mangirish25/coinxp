@@ -1,17 +1,23 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { GamificationToastHost } from './GamificationToastHost';
 
 const links = [
   { to: '/', label: 'Home', icon: Activity },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { to: '/budgets', label: 'Budgets', icon: WalletCards },
+  { to: '/xp', label: 'XP', icon: Sparkles },
 ];
 
 export function AppShell() {
-  const { user, logout } = useAuth();
+  const { user, logout, changeTimezone } = useAuth();
   const navigate = useNavigate();
+  const [timezone, setTimezone] = useState(user?.timezone ?? 'Asia/Kolkata');
+  const [timezoneMessage, setTimezoneMessage] = useState('');
+  useEffect(() => { if (user?.timezone) setTimezone(user.timezone); }, [user?.timezone]);
 
   async function handleLogout() {
     await logout().catch(() => undefined);
@@ -44,9 +50,9 @@ export function AppShell() {
         </nav>
         {user ? (
           <div className="mt-6 flex items-center justify-between gap-3 border-t border-black/5 pt-5">
-            <span className="truncate text-sm font-medium text-ink-700" title={user.displayName}>
-              {user.displayName}
-            </span>
+            <div className="min-w-0"><span className="block truncate text-sm font-medium text-ink-700" title={user.displayName}>{user.displayName}</span>
+              <label className="mt-2 block text-xs text-ink-500">Time zone<input aria-label="Time zone" list="coinxp-timezones" className="mt-1 block w-full max-w-40 rounded border px-2 py-1" value={timezone} onChange={(event) => setTimezone(event.target.value)} /><datalist id="coinxp-timezones">{['Asia/Kolkata', 'UTC', 'America/New_York', 'Europe/London', 'Asia/Tokyo', 'Australia/Sydney'].map((zone) => <option key={zone} value={zone} />)}</datalist></label>
+              <button type="button" className="mt-1 text-xs text-brand-700 underline" onClick={() => changeTimezone(timezone).then(() => setTimezoneMessage('Time zone updated.')).catch((error: Error) => setTimezoneMessage(error.message))}>Save time zone</button>{timezoneMessage && <span role="status" className="mt-1 block text-xs">{timezoneMessage}</span>}</div>
             <button
               type="button"
               onClick={() => void handleLogout()}
@@ -79,6 +85,7 @@ export function AppShell() {
       <main className="min-w-0 flex-1 px-5 py-8 md:px-10 md:py-12">
         <Outlet />
       </main>
+      <GamificationToastHost />
     </div>
   );
 }

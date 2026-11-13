@@ -22,16 +22,12 @@ import { dashboardApi } from '../services/dashboardApi';
 import { formatINR } from '../utils/money';
 import { MonthSelector } from '../components/MonthSelector';
 import { currentMonthInTimezone } from './budgetPageUtils';
+import { GamificationSummaryCard } from '../components/GamificationSummaryCard';
 
 const card = 'rounded-2xl border border-black/5 bg-white p-5 shadow-sm';
 const palette = ['#0f766e', '#2563eb', '#9333ea', '#ea580c', '#be123c', '#475569'];
 const money = (value: number) => formatINR(value);
 const axisMoney = (value: number) => money(Math.round(value));
-
-function GamificationSummarySlot() {
-  // future: XP, level and streak summary
-  return null;
-}
 
 function SectionError({ retry }: { retry: () => void }) {
   return (
@@ -263,7 +259,7 @@ export function DashboardPage() {
             </>
           )
         ))}
-      <GamificationSummarySlot />
+      <GamificationSummaryCard />
       {!empty && (
         <div className="grid gap-4 xl:grid-cols-2">
           <section className={card}>

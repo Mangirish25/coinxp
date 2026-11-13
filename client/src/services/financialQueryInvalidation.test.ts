@@ -4,12 +4,12 @@ import { transactionApi } from './transactionApi';
 import { budgetApi } from './budgetApi';
 import { queryClient } from './queryClient';
 
-describe('dashboard and analytics query invalidation', () => {
+describe('dashboard, analytics, and gamification query invalidation', () => {
   afterEach(() => {
     queryClient.clear();
     vi.unstubAllGlobals();
   });
-  it('refetches active dashboard and analytics queries after transaction and budget mutations', async () => {
+  it('refetches active dashboard, analytics, and gamification queries after transaction and budget mutations', async () => {
     let calls = 0;
     let resolveRefresh: () => void = () => {};
     const refreshed = new Promise<void>((resolve) => {
@@ -35,10 +35,17 @@ describe('dashboard and analytics query invalidation', () => {
     });
     const analyticsUnsubscribe = analyticsObserver.subscribe(() => undefined);
     await analyticsObserver.refetch();
+    const gamificationObserver = new QueryObserver(queryClient, {
+      queryKey: ['gamification', 'summary'],
+      queryFn: async () => ++calls,
+    });
+    const gamificationUnsubscribe = gamificationObserver.subscribe(() => undefined);
+    await gamificationObserver.refetch();
     await budgetApi.save({ scope: 'monthly_total', amount: '10.00' });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(calls).toBeGreaterThanOrEqual(4);
+    expect(calls).toBeGreaterThanOrEqual(6);
     unsubscribe();
     analyticsUnsubscribe();
+    gamificationUnsubscribe();
   });
 });

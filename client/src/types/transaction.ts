@@ -23,6 +23,7 @@ export interface Transaction {
   categoryName: string;
   categoryIcon: string | null;
   categoryType: 'income' | 'expense';
+  gamification?: { xpDelta: number; lifetimeXp: number; spendableXp: number; level: number; title: string; levelUp: { from: number; to: number; title: string } | null } | null;
 }
 
 export interface Pagination {

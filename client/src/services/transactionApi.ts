@@ -3,6 +3,11 @@ import type { AuditEntry, Transaction, TransactionList } from '../types/transact
 import { invalidateBudgetStatus } from './budgetInvalidation';
 import { invalidateFinancialSummaries } from './queryClient';
 
+function showGamification(result: Transaction) {
+  if (result.gamification && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('coinxp:gamification-toast', { detail: result.gamification }));
+  return result;
+}
+
 function invalidateTransactions() {
   invalidateBudgetStatus();
   invalidateFinancialSummaries();
@@ -18,10 +23,11 @@ export const transactionApi = {
   create(body: unknown) {
     return apiFetch<Transaction>('/api/transactions', {
       method: 'POST',
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
       body: JSON.stringify(body),
     }).then((result) => {
       invalidateTransactions();
-      return result;
+      return showGamification(result);
     });
   },
   update(id: number, body: unknown) {
@@ -30,7 +36,7 @@ export const transactionApi = {
       body: JSON.stringify(body),
     }).then((result) => {
       invalidateTransactions();
-      return result;
+      return showGamification(result);
     });
   },
   delete(id: number) {
@@ -47,7 +53,7 @@ export const transactionApi = {
       body: '{}',
     }).then((result) => {
       invalidateTransactions();
-      return result;
+      return showGamification(result);
     });
   },
   history(id: number) {

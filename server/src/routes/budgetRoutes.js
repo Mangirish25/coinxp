@@ -13,10 +13,10 @@ import {
   upsertBudgetSchema,
 } from '../validators/budgetSchemas.js';
 
-export function createBudgetRoutes({ db, env }) {
+export function createBudgetRoutes(options) {
   const router = Router();
-  const controller = createBudgetController({ db });
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  const controller = createBudgetController(options);
+  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret }));
   router.put('/', requireJson, validateBody(upsertBudgetSchema), controller.upsert);
   router.get('/', validateQuery(budgetListQuerySchema), controller.list);
   router.get('/status', validateQuery(budgetStatusQuerySchema), controller.status);

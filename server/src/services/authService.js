@@ -4,6 +4,7 @@ import { AUTH_CONFIG, DUMMY_PASSWORD_HASH } from '../config/authConstants.js';
 import { createUserRepository } from '../repositories/userRepository.js';
 import { nowIso } from '../utils/dates.js';
 import { httpError } from '../utils/httpError.js';
+import rules from '../gamification/rules.config.js';
 
 function publicUser(user) {
   return {
@@ -37,7 +38,7 @@ function isUniqueEmailError(error) {
   return error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === 'SQLITE_CONSTRAINT_PRIMARYKEY';
 }
 
-export function createAuthService({ db, secret }) {
+export function createAuthService({ db, secret, gameEngine }) {
   const users = createUserRepository(db);
 
   return {
@@ -47,16 +48,16 @@ export function createAuthService({ db, secret }) {
       }
 
       const passwordHash = await argon2.hash(password, AUTH_CONFIG.argon2Options);
-      const createdAt = nowIso();
+      const createdAt = gameEngine?.clock.now().toISOString() ?? nowIso();
       let user;
       try {
-        user = users.create({
-          email,
-          passwordHash,
-          displayName,
-          timezone: resolveTimezone(timezone),
-          createdAt,
-        });
+        user = db.transaction(() => {
+          const created = users.create({ email, passwordHash, displayName, timezone: resolveTimezone(timezone), createdAt });
+          gameEngine?.enqueue({ eventType: 'USER_REGISTERED', userId: created.id, occurredAt: createdAt,
+            localDate: gameEngine.localDate(created.id, new Date(createdAt)), timezone: created.timezone,
+            data: { userId: created.id } });
+          return created;
+        })();
       } catch (error) {
         if (isUniqueEmailError(error)) {
           throw httpError(409, 'EMAIL_TAKEN', 'An account with this email already exists.');
@@ -64,7 +65,7 @@ export function createAuthService({ db, secret }) {
         throw error;
       }
 
-      // future: emit USER_REGISTERED event
+      if (gameEngine) { try { gameEngine.processUser(user.id); } catch { /* registration remains successful after commit */ } }
       return { user: publicUser(user), token: createToken(user.id, secret) };
     },
 
@@ -86,6 +87,29 @@ export function createAuthService({ db, secret }) {
     findPublicUserById(id) {
       const user = users.findById(id);
       return user ? publicUser(user) : null;
+    },
+
+    updateTimezone(id, timezone) {
+      const current = users.timezoneSettings(id);
+      if (!current) throw httpError(404, 'USER_NOT_FOUND', 'User not found.');
+      let normalized;
+      try { new Intl.DateTimeFormat('en', { timeZone: timezone }); normalized = timezone; }
+      catch { throw httpError(400, 'INVALID_TIMEZONE', 'Choose a valid time zone.'); }
+      if (current.timezone === normalized) return publicUser(users.findById(id));
+      const now = gameEngine?.clock.now() ?? new Date();
+      if (current.timezoneChangedAt) {
+        const elapsed = now.getTime() - new Date(current.timezoneChangedAt).getTime();
+        const cooldownMs = rules.timezone.changeCooldownDays * rules.units.hoursPerDay * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
+        if (elapsed < cooldownMs) throw httpError(429, 'TIMEZONE_COOLDOWN', `You can change your time zone once every ${rules.timezone.changeCooldownDays} days.`);
+      }
+      db.transaction(() => {
+        users.updateTimezone({ id, timezone: normalized, changedAt: now.toISOString() });
+        const date = gameEngine?.localDate(id, now);
+        gameEngine?.enqueue({ eventType: 'TIMEZONE_CHANGED', userId: id, occurredAt: now.toISOString(), localDate: date, timezone: normalized,
+          data: { previousTimezone: current.timezone, timezone: normalized } });
+      })();
+      if (gameEngine) { try { gameEngine.processUser(id); } catch { /* timezone changes remain successful after commit */ } }
+      return publicUser(users.findById(id));
     },
   };
 }

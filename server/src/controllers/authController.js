@@ -15,8 +15,8 @@ function cookieOptions(env) {
   };
 }
 
-export function createAuthController({ db, env }) {
-  const auth = createAuthService({ db, secret: env.jwtSecret });
+export function createAuthController({ db, env, gameEngine }) {
+  const auth = createAuthService({ db, secret: env.jwtSecret, gameEngine });
   const setCookie = (res, token) => res.cookie(AUTH_CONFIG.cookieName, token, cookieOptions(env));
 
   return {
@@ -39,5 +39,6 @@ export function createAuthController({ db, env }) {
     me(req, res) {
       res.json(req.user);
     },
+    timezone: asyncHandler(async (req, res) => res.json(auth.updateTimezone(req.user.id, req.body.timezone))),
   };
 }

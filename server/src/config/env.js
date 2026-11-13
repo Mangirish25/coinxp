@@ -40,5 +40,6 @@ export function loadEnv(source = process.env) {
     jwtSecret: source.JWT_SECRET,
     clientOrigin: source.CLIENT_ORIGIN,
     authRateLimits: undefined,
+    gamificationEnabled: source.GAMIFICATION_ENABLED !== 'false',
   };
 }

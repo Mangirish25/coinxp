@@ -1,6 +1,6 @@
 # CoinXP
 
-CoinXP is a personal finance web app designed to grow into a habit-building product. It currently includes the project foundation, cookie-based authentication, transaction and category management, budgets, and an on-demand dashboard with analytics and monthly reports. Gamification behavior remains future work.
+CoinXP is a personal finance web app designed to grow into a habit-building product. It includes the project foundation, cookie-based authentication, transaction and category management, budgets, an on-demand dashboard with analytics and monthly reports, and a reversible XP economy. Streaks, rewards, and other later gamification features remain future work.
 
 ## Structure
 
@@ -78,7 +78,7 @@ Deleting a transaction sets `deleted_at`; list results exclude deleted rows unle
 
 Custom categories are archived through `deleted_at` rather than hard-deleted because transaction foreign keys and historical snapshots must remain valid. A same-name/type category added later revives the archived row. Restoring a transaction also revives its archived custom category if needed. This is the reason migration `002_transaction_audit.sql` adds `categories.deleted_at` in addition to the audit table.
 
-Create, update, and delete events are sent to the Part 1 gamification placeholder only after the database transaction commits. Event errors are caught and logged so financial writes remain successful. No XP or streak rules are implemented here; restore and no-op updates emit no event.
+Create, update, delete, and restore operations enqueue durable domain events in the same database transaction as their financial row and audit snapshot. The Part 6 worker processes events after commit; failures are retried and cannot change the financial response. Restore emits an event; a no-op update does not.
 
 All state-changing category, transaction, and budget endpoints require `Content-Type: application/json`, using the same SameSite=Lax CSRF mitigation documented above for authentication.
 
@@ -116,7 +116,7 @@ Analytics are derived on demand from non-deleted transactions. SQL performs the 
 
 `server/src/services/analyticsCalculator.js` contains framework-free rounding, comparisons, averages, calendar zero-fill, and day selection. Category shares use the largest-remainder method: each category first receives its integer basis-point floor, then remaining basis points are assigned by descending fractional remainder with a stable category-ID tie break. This guarantees category shares sum to exactly 10,000 basis points (100%). Percentages are derived from integer paise and rounded only at output boundaries.
 
-The dashboard summary executes a fixed 11 SQL queries: one initial timezone lookup and three analytics reads, four monthly budget-status lookups, and three daily-status lookups. It does not issue per-category or per-transaction queries. `GamificationSummarySlot` is an empty client placeholder for later XP, level, and streak summaries; this part adds no gamification behavior.
+The dashboard summary executes a fixed 11 SQL queries: one initial timezone lookup and three analytics reads, four monthly budget-status lookups, and three daily-status lookups. It does not issue per-category or per-transaction queries. The dashboard includes the live XP summary card introduced in Part 6; streaks, freezes, badges, challenges, rewards, and penalties remain reserved for later parts.
 
 The standalone benchmark is `npm run perf:analytics`. It seeds 20,000 in-memory transactions and times each dashboard/analytics endpoint; it is separate from the normal test suite. On the local run during implementation: summary 40.0 ms, category breakdown 8.5 ms, daily spending 5.4 ms, income vs expense 9.5 ms, and monthly report 15.5 ms. These are single-run local timings, not service-level targets.
 
@@ -132,3 +132,54 @@ The standalone benchmark is `npm run perf:analytics`. It seeds 20,000 in-memory 
 Useful commands: `npm test`, `npm run lint`, `npm run format`, `npm run db:migrate`, `npm run db:seed`, and `npm run db:reset` (development only).
 
 The Vite development server proxies `/api` to `http://localhost:3001`. Configure the proxy through `VITE_API_PROXY_TARGET` if needed. The client can use `VITE_API_BASE_URL` when calling a separately hosted API.
+
+## XP economy and gamification
+
+Part 6 adds an XP ledger and durable event pipeline. All rule values, thresholds, titles, caps, retry settings, timezone cooldown, and settlement windows live in `server/src/gamification/rules.config.js` (config version `0.1.0`). The attached Part 6 plan labels its settings as proposed; this implementation uses those recommended defaults. Change the defaults there only, then increment `CONFIG_VERSION` when deployed rules change.
+
+The economy keeps **lifetime XP** (used to derive the level) separate from **spendable XP** (reserved for future rewards). Both balances are cached in `user_progress` and can be rebuilt from the append-only `xp_ledger`. Ledger updates and deletes are blocked by SQLite triggers. An earned entitlement is unique by user and period; when its source stops qualifying, the ledger appends a reversal, and restoring eligibility appends a reinstatement. Each transition has a deterministic idempotency key. Level thresholds follow `base × L × (L − 1)` with base 50 and a level cap of 100; the maximum level reached is ratcheted.
+
+Current default awards:
+
+| Rule | Default |
+| ---- | ------- |
+| XP-001 daily transaction tracking | +10 for a non-deleted transaction of at least 500 paise entered on the same local date it happened |
+| XP-002 daily review | +15 once for a current-date review with a qualifying live transaction, or a valid no-spend declaration |
+| XP-003 daily limit adherence | +20 after the local next-day 04:00 settlement, using the daily limit snapshot from local day start |
+| XP-004 weekly consistency | +50 when at least `ceil(5 × eligible days / 7)` eligible days are tracked; at least three eligible days are required |
+| XP-005 monthly budget completion | +100 when at least 60% of eligible days are tracked (minimum 14) and spending stays within the month-start budget snapshot |
+| XP-006 onboarding milestones | +25 for first live transaction, first budget, and first daily review |
+| Combined daily cap | 100 XP across XP-001, XP-002, and XP-003 |
+
+No-spend declarations are XP-eligible at most twice per local Monday-to-Sunday week; further declarations are still recorded but not XP-eligible. A no-spend review requires no expense transaction on that local date. Daily reviews are permanent records. Transaction edits/deletes can reverse tracking, eligible review XP, and settlement entitlements, but they do not erase the review record. If a transaction is restored within the configured settlement window, an entitlement can be reinstated. Periods become immutable after 90 days; a nightly reconciliation checks the most recent 45 days.
+
+Daily and monthly settlement snapshots reconstruct transactions from `transaction_audit` and budgets from `budget_history`, both at the relevant local cutoff. Daily limits are snapshotted at the beginning of each local date; the monthly total is snapshotted at the beginning of the month. The first settlement boundary is local next day at 04:00. A scheduler runs settlement and outbox work, retries failed events with backoff, moves repeated failures to a dead-letter state, and purges completed outbox and idempotency rows after retention. The health endpoint reports the current dead-event count.
+
+Financial writes enqueue domain events inside the same database transaction as the financial row and audit/history entry. The worker processes them after commit. Gamification processing failures are logged and retried and cannot roll back transaction, budget, registration, or timezone writes. Set `GAMIFICATION_ENABLED=false` to disable event ingestion and awards while keeping financial operations available. `POST /api/transactions` accepts an optional `Idempotency-Key`; the client supplies one on each create request so a retried HTTP request cannot create a duplicate transaction.
+
+Authenticated endpoints:
+
+| Method | Endpoint | Behavior |
+| ------ | -------- | -------- |
+| `GET` | `/api/gamification/summary` | Lifetime/spendable XP, level progress, today’s review and tracking state, and unseen feed entries |
+| `GET` | `/api/gamification/ledger?page=&pageSize=&ruleId=&from=&to=` | Owner-scoped, paginated immutable XP ledger |
+| `GET` | `/api/gamification/daily-review/today` | Current local-date review eligibility and blockers |
+| `POST` | `/api/gamification/daily-review` | Record today’s review; optional `{ "noSpend": true }` declaration |
+| `POST` | `/api/gamification/feed/ack` | Acknowledge the owner’s ledger feed through `{ "upToLedgerId": n }` |
+| `PATCH` | `/api/auth/timezone` | Change the IANA timezone; first change is free, later changes follow the configured cooldown |
+| `GET` | `/api/gamification/rules` | Public, versioned rules configuration |
+
+The dashboard XP card offers the daily review. `/xp` shows level progress and ledger history. The UI displays XP change toasts from successful events. Timezone changes update future local-day calculations; transaction creation also records `created_local_date` and `created_tz` so XP-001 eligibility does not drift when a user later changes timezone. Existing rows receive NULL creation-date metadata from migration `004`; they remain part of financial totals but do not qualify for XP-001.
+
+Anti-abuse indicators are stored in `gamification_flags`: rapid entitlement churn, bulk backfill, four or more timezone changes within 30 days, and monthly budgets raised after a failed month are review flags only. Timezone changes are also limited by the configured seven-day cooldown after the first change. No XP penalty is applied. There is no streak, freeze, badge, reward, challenge, or social behavior in Part 6.
+
+Local operations (all administrative commands are dry-run unless `--apply` is provided):
+
+```sh
+npm run gamification:adjust -- 12 25 "correction reason" --apply
+npm run gamification:reconcile -- 12 2026-10-01 2026-11-10 --apply
+npm run gamification:rebuild-cache -- 12 --apply
+npm run gamification:requeue-dead -- 12 --apply
+```
+
+`GET /api/health` adds `gamificationDeadEvents`. Review these counts and the stored flags during operations; individual flag details and internal retry errors are not exposed through public API routes.

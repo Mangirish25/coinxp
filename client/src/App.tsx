@@ -10,6 +10,7 @@ import { MonthlyReportPage } from './pages/MonthlyReportPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { TransactionsPage } from './pages/TransactionsPage';
 import { BudgetsPage } from './pages/BudgetsPage';
+import { XpPage } from './pages/XpPage';
 
 export function App() {
   return (
@@ -27,6 +28,7 @@ export function App() {
               <Route path="monthly-report" element={<MonthlyReportPage />} />
               <Route path="transactions" element={<TransactionsPage />} />
               <Route path="budgets" element={<BudgetsPage />} />
+              <Route path="xp" element={<XpPage />} />
             </Route>
           </Route>
         </Routes>

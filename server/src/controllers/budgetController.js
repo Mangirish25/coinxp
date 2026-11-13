@@ -3,8 +3,8 @@ import { paiseToRupees } from '../utils/money.js';
 
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-export function createBudgetController({ db }) {
-  const service = createBudgetService({ db });
+export function createBudgetController(options) {
+  const service = createBudgetService(options);
   return {
     upsert: asyncHandler(async (req, res) => {
       const row = await service.upsert(req.user.id, req.body);

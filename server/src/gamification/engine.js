@@ -1,0 +1,545 @@
+import { createOutboxRepository, buildEnvelope, enqueue as enqueueRow } from './outbox/outboxRepository.js';
+import { createLedgerRepository } from './ledger/ledgerRepository.js';
+import { createGamificationFactsRepository } from './ledger/factsRepository.js';
+import { createSettlementRepository } from './settlement/settlementRepository.js';
+import { localDateAt, shiftDate, weekKey, weekBounds, monthOf, monthStart, monthEnd, localInstantToUtc, weekDateRange } from './dateMath.js';
+import { derivedLevel, titleForLevel, levelProgress, levelUpsBetween } from './levels.js';
+import { messageForReason } from './messages.js';
+import defaultRules, { CONFIG_VERSION } from './rules.config.js';
+import { systemClock } from './clock.js';
+import { randomUUID } from 'node:crypto';
+import { dayCutoff, effectiveBudgetFromHistory, transactionFactsAsOf } from './asOf.js';
+import { createTransactionRepository } from '../repositories/transactionRepository.js';
+import { createBudgetHistoryRepository } from '../repositories/budgetHistoryRepository.js';
+import { httpError } from '../utils/httpError.js';
+
+const inbound = new Set([
+  'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
+  'BUDGET_UPSERTED','BUDGET_DELETED','DAILY_REVIEW_COMPLETED',
+]);
+
+function safeTotal(value,label='XP') {
+  const number=typeof value==='bigint'?value:BigInt(value??0);
+  if(number>BigInt(Number.MAX_SAFE_INTEGER)||number<BigInt(Number.MIN_SAFE_INTEGER))throw new RangeError(`${label} exceeds the safe integer range.`);
+  return Number(number);
+}
+
+function percentageCeiling(numerator,denominator,config) {
+  return Number((BigInt(numerator)*BigInt(config.units.basisPoints)+BigInt(denominator)-BigInt(config.units.one))/BigInt(denominator));
+}
+
+function addDate(date, days) { return shiftDate(date,days); }
+
+export function createGamificationEngine({ db, clock = systemClock, config = defaultRules, logger = console, enabled = true } = {}) {
+  if(!db)throw new Error('createGamificationEngine requires a database connection.');
+  const outbox=createOutboxRepository(db);
+  const ledger=createLedgerRepository(db);
+  const facts=createGamificationFactsRepository(db);
+  const settlements=createSettlementRepository(db);
+  const transactions=createTransactionRepository(db);
+  const budgetHistory=createBudgetHistoryRepository(db);
+
+  function nowIso(){return clock.now().toISOString();}
+  function localDate(userId, instant=clock.now()){
+    const user=facts.user(userId); if(!user)throw httpError(401,'UNAUTHENTICATED','Please sign in to continue.');
+    return localDateAt(instant,user.timezone);
+  }
+  function enqueue(event){
+    if(!enabled)return null;
+    const envelope=buildEnvelope(event,clock);
+    enqueueRow(db,envelope);
+    return envelope;
+  }
+  function publish(eventType,userId,data,dedupeKey){
+    const date=localDate(userId);
+    const user=facts.user(userId);
+    const envelope=buildEnvelope({eventType,userId,data,localDate:date,timezone:user?.timezone},clock);
+    enqueueRow(db,envelope,{status:'PUBLISHED',dedupeKey});
+  }
+
+  function ensureProgress(userId) {
+    const user=facts.user(userId); if(!user)return null;
+    return ledger.ensureProgress(userId,localDateAt(user.createdAt,user.timezone),nowIso());
+  }
+
+  function awardValue(ruleId) {
+    const values={
+      'XP-001':config.xp.dailyTracking,'XP-002':config.xp.dailyReview,'XP-003':config.xp.dailyAdherence,
+      'XP-004':config.xp.weeklyConsistency,'XP-005':config.xp.monthlyBudgetCompletion,
+      'XP-006:FIRST_TRANSACTION':config.xp.onboarding.firstTransaction,
+      'XP-006:FIRST_BUDGET':config.xp.onboarding.firstBudget,
+      'XP-006:FIRST_REVIEW':config.xp.onboarding.firstReview,
+    };
+    return values[ruleId]??0;
+  }
+
+  function isLocked(userId,key){return ledger.isKeyLocked(userId,key);}
+
+  function reconcileKey({userId,key,ruleId,periodType,periodKey,desired,value=awardValue(ruleId),reasonCode,sourceEventId,note=null}) {
+    if(isLocked(userId,key))return null;
+    const progress=ensureProgress(userId);
+    if(!progress)return null;
+    const previous=ledger.latestForKey(userId,key);
+    const state=previous===undefined?'NONE':previous.entryType==='REVERSAL'?'REVERSED':'ACTIVE';
+    const transitionNo=previous?.transitionNo??0;
+    let entryType;
+    let delta=0;
+    let reversesEntryId=null;
+    if(state==='NONE'&&desired){entryType='AWARD';delta=value;}
+    else if(state==='ACTIVE'&&!desired){entryType='REVERSAL';const source=ledger.sourceAwardForKey(userId,key);delta=source?.lifetimeDelta??0;delta=-delta;reversesEntryId=previous.id;}
+    else if(state==='REVERSED'&&desired){entryType='REINSTATE';const source=ledger.sourceAwardForKey(userId,key);delta=source?.lifetimeDelta??value;}
+    else return null;
+
+    const transitionReasonCode = entryType === 'REVERSAL' && ['XP-001','XP-006:FIRST_TRANSACTION'].includes(ruleId)
+      ? 'RECORD_REMOVED'
+      : entryType === 'REINSTATE' ? 'RECORD_RESTORED' : reasonCode;
+
+    if(entryType==='AWARD'||entryType==='REINSTATE'){
+      if(periodType==='day'&&['XP-001','XP-002','XP-003'].includes(ruleId)){
+        const already=ledger.activeAmountForDay(userId,periodKey);
+        delta=Math.max(config.units.zero,Math.min(delta,config.xp.dailyRuleCap-already));
+      }
+      if(delta===config.units.zero)return null;
+    }
+    const lifetimeDelta=delta;
+    const nextLifetime=BigInt(progress.lifetimeXp)+BigInt(lifetimeDelta);
+    if(nextLifetime<BigInt(config.units.zero))throw new RangeError('XP reversal would make lifetime XP negative.');
+    const lifetimeXp=safeTotal(nextLifetime);
+    const spendableXp=safeTotal(BigInt(progress.spendableXp)+BigInt(lifetimeDelta));
+    const derived=derivedLevel(lifetimeXp,config);
+    const maxLevelReached=Math.max(progress.maxLevelReached,derived);
+    const nextNo=transitionNo+config.units.one;
+    const idempotencyKey=`u${userId}:${key}#${nextNo}`;
+    const entryId=ledger.insert({userId,entryType,ruleId,entitlementKey:key,transitionNo:nextNo,idempotencyKey,
+      lifetimeDelta,balanceDelta:lifetimeDelta,periodType,periodKey,reversesEntryId,sourceEventId,reasonCode:transitionReasonCode,
+      note,configVersion:CONFIG_VERSION,actor:'system',createdAt:nowIso()});
+    ledger.updateProgress(userId,{lifetimeXp,spendableXp,maxLevelReached,lastLedgerId:entryId,updatedAt:nowIso()});
+    const outputType=entryType==='REVERSAL'?'XP_DEDUCTED':'XP_EARNED';
+    const outputData={ledgerId:entryId,ruleId,entitlementKey:key,delta:lifetimeDelta,reasonCode:transitionReasonCode,message:messageForReason(transitionReasonCode,{limitPaise:note}),lifetimeXp,spendableXp,level:maxLevelReached};
+    publish(outputType,userId,outputData,`${outputType}:${userId}:${entryId}`);
+    for(const level of levelUpsBetween(progress.maxLevelReached,maxLevelReached)){
+      const title=titleForLevel(level,config);
+      publish('LEVEL_UP',userId,{from:level-config.units.one,to:level,title,ledgerId:entryId},`LEVEL_UP:${userId}:${level}`);
+    }
+    if(nextNo>=config.churn.flagAtTransitions)ledger.flag(userId,'HIGH_EDIT_CHURN',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());
+    if(nextNo>=config.churn.lockAtTransitions)ledger.flag(userId,'KEY_LOCKED',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());
+    return {id:entryId,entryType,ruleId,lifetimeDelta,reasonCode:transitionReasonCode,levelUps:levelUpsBetween(progress.maxLevelReached,maxLevelReached).map((level)=>({from:level-config.units.one,to:level,title:titleForLevel(level,config)}))};
+  }
+
+  function periodSealed(userId,type,key){
+    const settled=settlements.get(userId,type,key); if(!settled)return false;
+    const user=facts.user(userId); const today=localDateAt(clock.now(),user.timezone);
+    let end=type==='day'?key:type==='week'?weekBounds(key).end:monthEnd(key);
+    return end<addDate(today,-config.settlement.sealAfterDays);
+  }
+
+  function currentTracked(userId,date){
+    const liveCount=facts.currentLiveCount(userId,date,config.tracking.minQualifyingAmountPaise);
+    const review=facts.review(userId,date);
+    const expenseExists=facts.hasExpense(userId,date);
+    const noSpend=Boolean(review?.noSpendDeclared)&&!expenseExists;
+    return {tracked:liveCount>0||noSpend,xpTracked:liveCount>0||(noSpend&&Boolean(review?.xpEligible)),liveCount,noSpend,expenseExists};
+  }
+
+  function currentExpenseTotal(userId,from,to){
+    return facts.currentExpenseTotal(userId,from,to);
+  }
+
+  function reconcileSettledDay(userId,date,sourceEventId){
+    const settlement=settlements.get(userId,'day',date); if(!settlement||periodSealed(userId,'day',date))return null;
+    const key=`XP-003:${date}`;
+    const tracked=currentTracked(userId,date).xpTracked;
+    const spent=currentExpenseTotal(userId,date,date);
+    const desired=settlement.outcome==='PASS'&&tracked&&spent<=settlement.details.limitPaise;
+    const reasonCode=desired?'DAILY_ADHERENCE':settlement.outcome==='PASS'&&!tracked?'NO_LONGER_TRACKED':'LIMIT_NOW_EXCEEDED';
+    return reconcileKey({userId,key,ruleId:'XP-003',periodType:'day',periodKey:date,desired,
+      reasonCode,sourceEventId,note:String(settlement.details.limitPaise??'')});
+  }
+
+  function reconcileReview(userId,date,sourceEventId){
+    const review=facts.review(userId,date);
+    if(!review||periodSealed(userId,'day',date))return null;
+    const stillEligible=Boolean(review.xpEligible)&&(
+      review.noSpendDeclared===1?!facts.hasExpense(userId,date):facts.currentLiveCount(userId,date,config.tracking.minQualifyingAmountPaise)>0
+    );
+    return reconcileKey({userId,key:`XP-002:${date}`,ruleId:'XP-002',periodType:'day',periodKey:date,desired:stillEligible,
+      reasonCode:stillEligible?'DAILY_REVIEW_COMPLETED':'NO_LONGER_TRACKED',sourceEventId});
+  }
+
+  function reconcileSettledWeek(userId,key,sourceEventId){
+    const settlement=settlements.get(userId,'week',key); if(!settlement||periodSealed(userId,'week',key))return null;
+    const {start,end}=weekBounds(key); const eligibleDates=weekDateRange(start,end).filter((date)=>date>=userProgressStart(userId));
+    const count=eligibleDates.filter((date)=>currentTracked(userId,date).xpTracked).length;
+    const desired=settlement.outcome==='PASS'&&count>=settlement.details.requiredTracked;
+    return reconcileKey({userId,key:`XP-004:${key}`,ruleId:'XP-004',periodType:'week',periodKey:key,desired,
+      reasonCode:desired?'WEEKLY_CONSISTENCY':'NO_LONGER_TRACKED',sourceEventId});
+  }
+
+  function userProgressStart(userId){return ledger.progress(userId)?.gamificationStartDate??localDate(userId);}
+
+  function reconcileSettledMonth(userId,month,sourceEventId){
+    const settlement=settlements.get(userId,'month',month); if(!settlement||periodSealed(userId,'month',month))return null;
+    const startDate=monthStart(`${month}-01`); const eligibleDates=weekDateRange(startDate,monthEnd(month)).filter((date)=>date>=userProgressStart(userId));
+    const count=eligibleDates.filter((date)=>currentTracked(userId,date).xpTracked).length;
+    const spent=currentExpenseTotal(userId,startDate,monthEnd(month));
+    const desired=settlement.outcome==='PASS'&&count>=settlement.details.requiredTracked&&spent<=settlement.details.budgetPaise;
+    const reasonCode=desired?'MONTHLY_BUDGET_COMPLETION':count<settlement.details.requiredTracked?'NO_LONGER_TRACKED':'LIMIT_NOW_EXCEEDED';
+    return reconcileKey({userId,key:`XP-005:${month}`,ruleId:'XP-005',periodType:'month',periodKey:month,desired,reasonCode,sourceEventId,note:String(settlement.details.budgetPaise??'')});
+  }
+
+  function reviewNoSpendEligible(userId,date,weekStart) {
+    if(facts.hasExpense(userId,date))return false;
+    return facts.reviewCountWeek(userId,weekStart,date)<config.tracking.noSpendDeclarationsPerWeekCap;
+  }
+
+  function dailyLimitAsOf(userId,date,timezone){
+    const instant=localInstantToUtc(date,config.units.zero,timezone);
+    const history=facts.budgetHistory(userId,instant);
+    return effectiveBudgetFromHistory(history,'daily_limit',null,monthOf(date),instant);
+  }
+
+  function monthlyBudgetAsOf(userId,month,timezone){
+    const start=monthStart(`${month}-01`); const instant=localInstantToUtc(start,config.units.zero,timezone);
+    const history=facts.budgetHistory(userId,instant);
+    return effectiveBudgetFromHistory(history,'monthly_total',null,month,instant);
+  }
+
+  function dailyBaseline(userId,date){
+    const from=addDate(date,-config.guards.limitRealism.dailyLookbackDays);
+    const entries=settlements.list(userId,'day',from,addDate(date,-config.units.one));
+    const amounts=entries.filter((entry)=>entry.outcome!=='INELIGIBLE'&&entry.details.xpTracked&&entry.details.expensePaise>config.units.zero).map((entry)=>entry.details.expensePaise);
+    if(amounts.length<config.guards.limitRealism.dailyMinBaselineDays)return null;
+    return Number(amounts.reduce((sum,value)=>sum+BigInt(value),0n)/BigInt(amounts.length));
+  }
+
+  function monthlyBaseline(userId,month){
+    const [year,number]=month.split('-').map(Number); const months=[];
+    for(let offset=config.units.one;offset<=config.guards.limitRealism.monthlyLookbackMonths;offset+=config.units.one){
+      const date=new Date(Date.UTC(year,number-config.units.one-offset,config.units.one)); const key=`${date.getUTCFullYear()}-${String(date.getUTCMonth()+config.units.one).padStart(config.units.two,'0')}`;
+      const row=settlements.get(userId,'month',key); if(row&&row.details.trackedShareBps>=config.guards.limitRealism.monthlyMinTrackedShareBps&&row.details.expensePaise>config.units.zero)months.push(row.details.expensePaise);
+    }
+    if(months.length<config.guards.limitRealism.monthlyMinMonths)return null;
+    return Number(months.reduce((sum,value)=>sum+BigInt(value),0n)/BigInt(months.length));
+  }
+
+  function settleDay(userId,date,timezone){
+    if(settlements.get(userId,'day',date))return null;
+    const cutoff=dayCutoff(date,timezone,config,localInstantToUtc);
+    const userStart=ledger.progress(userId)?.gamificationStartDate;
+    const reviews=facts.review(userId,date);
+    const audit=facts.auditRowsAsOf(userId,cutoff);
+    const asOfFacts=transactionFactsAsOf(audit,date,date,cutoff,config.tracking.minQualifyingAmountPaise);
+    const active=asOfFacts.filter((item)=>item.transactionDate===date);
+    const expensePaise=safeTotal(active.filter((item)=>item.type==='expense').reduce((sum,item)=>sum+BigInt(item.amountPaise),0n),'Expense total');
+    const liveCount=active.filter((item)=>item.live).length;
+    const noSpend=Boolean(reviews?.noSpendDeclared)&&!active.some((item)=>item.type==='expense');
+    const tracked=liveCount>0||noSpend;
+    const xpTracked=liveCount>0||(noSpend&&Boolean(reviews?.xpEligible));
+    const limit=dailyLimitAsOf(userId,date,timezone);
+    const baseline=dailyBaseline(userId,date);
+    let outcome='INELIGIBLE'; let reasonCode='NOT_TRACKED';
+    if(userStart&&date<userStart){reasonCode='BEFORE_GAMIFICATION_START';}
+    else if(!limit){reasonCode='NO_LIMIT';}
+    else if(!tracked){reasonCode='NOT_TRACKED';}
+    else if(noSpend&&!reviews?.xpEligible){reasonCode='NO_SPEND_CAP';}
+    else if(config.guards.limitRealism.enabled&&baseline!==null&&BigInt(limit.amountPaise)>BigInt(config.guards.limitRealism.factor)*BigInt(baseline)){reasonCode='LIMIT_NOT_MEANINGFUL';}
+    else if(xpTracked){outcome=expensePaise<=limit.amountPaise?'PASS':'FAIL';reasonCode=outcome==='PASS'?'DAILY_ADHERENCE':'LIMIT_EXCEEDED';}
+    const details={limitPaise:limit?.amountPaise??null,limitSource:limit?.source??null,expensePaise,liveCount,tracked,xpTracked,noSpend,xpEligible:reviews?.xpEligible===1,baselinePaise:baseline,cutoffAt:cutoff,requiredTracked:null};
+    const inserted=settlements.insert({userId,periodType:'day',periodKey:date,outcome,reasonCode,details,settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
+    if(inserted){publish('DAY_SETTLED',userId,{periodType:'day',periodKey:date,outcome,tracked:xpTracked},`DAY_SETTLED:${userId}:${date}`);}
+    if(outcome==='PASS')return reconcileKey({userId,key:`XP-003:${date}`,ruleId:'XP-003',periodType:'day',periodKey:date,desired:true,reasonCode:'DAILY_ADHERENCE',sourceEventId:null,note:String(limit.amountPaise)});
+    return null;
+  }
+
+  function settleWeek(userId,key){
+    if(settlements.get(userId,'week',key))return null;
+    const {start,end}=weekBounds(key); const userStart=userProgressStart(userId); const dates=weekDateRange(start,end).filter((date)=>date>=userStart);
+    if(dates.length<config.weekly.minEligibleDays)return settlements.insert({userId,periodType:'week',periodKey:key,outcome:'INELIGIBLE',reasonCode:'TOO_FEW_DAYS',details:{eligibleDays:dates.length,requiredTracked:config.units.zero,xpTrackedDays:config.units.zero},settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
+    const days=settlements.list(userId,'day',start,end);
+    const trackedDays=days.filter((entry)=>entry.details.xpTracked).length;
+    const required=percentageCeiling(config.weekly.requiredTrackedDays*dates.length,config.weekly.daysPerWeek,config);
+    const outcome=trackedDays>=required?'PASS':'FAIL';
+    const inserted=settlements.insert({userId,periodType:'week',periodKey:key,outcome,reasonCode:outcome==='PASS'?'WEEKLY_CONSISTENCY':'LOW_TRACKING',details:{eligibleDays:dates.length,requiredTracked:required,xpTrackedDays:trackedDays},settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
+    if(inserted)publish('WEEK_SETTLED',userId,{periodType:'week',periodKey:key,outcome,tracked:trackedDays>0},`WEEK_SETTLED:${userId}:${key}`);
+    if(outcome==='PASS')return reconcileKey({userId,key:`XP-004:${key}`,ruleId:'XP-004',periodType:'week',periodKey:key,desired:true,reasonCode:'WEEKLY_CONSISTENCY'});
+    return null;
+  }
+
+  function settleMonth(userId,month,timezone){
+    if(settlements.get(userId,'month',month))return null;
+    const start=monthStart(`${month}-01`); const end=monthEnd(month); const userStart=userProgressStart(userId);
+    const dates=weekDateRange(start,end).filter((date)=>date>=userStart); const budget=monthlyBudgetAsOf(userId,month,timezone);
+    const dayRows=settlements.list(userId,'day',start,end); const trackedDays=dayRows.filter((entry)=>entry.details.xpTracked).length;
+    const required=percentageCeiling(config.monthly.minTrackedShareBps*dates.length,config.units.basisPoints,config);
+    const nextMonthStart=addDate(end,config.units.one); const cutoff=localInstantToUtc(nextMonthStart,config.settlement.cutoffLocalHour,timezone);
+    const audit=facts.auditRowsAsOf(userId,cutoff); const asOfFacts=transactionFactsAsOf(audit,start,end,cutoff,config.tracking.minQualifyingAmountPaise);
+    const expensePaise=safeTotal(asOfFacts.filter((row)=>row.type==='expense').reduce((sum,row)=>sum+BigInt(row.amountPaise),0n),'Monthly expense total');
+    const trackedShareBps=dates.length?Math.floor((trackedDays*config.units.basisPoints)/dates.length):config.units.zero;
+    const baseline=monthlyBaseline(userId,month);
+    let outcome='INELIGIBLE';let reasonCode='NO_BUDGET';
+    if(dates.length<config.monthly.minEligibleDays)reasonCode='TOO_FEW_DAYS';
+    else if(!budget||budget.amountPaise===config.units.zero)reasonCode='NO_BUDGET';
+    else if(trackedDays<required)reasonCode='LOW_TRACKING';
+    else if(config.guards.limitRealism.enabled&&baseline!==null&&BigInt(budget.amountPaise)>BigInt(config.guards.limitRealism.factor)*BigInt(baseline))reasonCode='BUDGET_NOT_MEANINGFUL';
+    else{outcome=expensePaise<=budget.amountPaise?'PASS':'FAIL';reasonCode=outcome==='PASS'?'MONTHLY_BUDGET_COMPLETION':'BUDGET_EXCEEDED';}
+    const details={budgetPaise:budget?.amountPaise??null,budgetSource:budget?.source??null,expensePaise,trackedDays,eligibleDays:dates.length,requiredTracked:required,trackedShareBps,baselinePaise:baseline,cutoffAt:cutoff};
+    const inserted=settlements.insert({userId,periodType:'month',periodKey:month,outcome,reasonCode,details,settledAt:nowIso(),ruleVersion:CONFIG_VERSION});
+    if(inserted)publish('MONTH_SETTLED',userId,{periodType:'month',periodKey:month,outcome,tracked:trackedDays>0},`MONTH_SETTLED:${userId}:${month}`);
+    if(outcome==='PASS')return reconcileKey({userId,key:`XP-005:${month}`,ruleId:'XP-005',periodType:'month',periodKey:month,desired:true,reasonCode:'MONTHLY_BUDGET_COMPLETION',note:String(budget.amountPaise)});
+    return null;
+  }
+
+  function closeThrough(userId,instant=clock.now()){
+    const user=facts.user(userId); const shifted=new Date(instant.getTime()-config.settlement.lateWindowHours*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond);
+    return shiftDate(localDateAt(shifted,user.timezone),-config.units.one);
+  }
+
+  function settleUser(userId){
+    if(!enabled)return {settled:config.units.zero};
+    const user=facts.user(userId); if(!user)return {settled:config.units.zero};
+    ensureProgress(userId);
+    const through=closeThrough(userId);
+    const progress=ledger.progress(userId);
+    const accountStart=progress.gamificationStartDate??localDateAt(user.createdAt,user.timezone);
+    const earliest=accountStart<addDate(through,-config.settlement.sealAfterDays)?addDate(through,-config.settlement.sealAfterDays):accountStart;
+    const dates=facts.candidateDates(userId,earliest,through);
+    let settledCount=config.units.zero;
+    for(const date of dates){
+      db.transaction(()=>{settleDay(userId,date,user.timezone);})(); settledCount+=config.units.one;
+    }
+    const startWeek=weekKey(earliest); const endWeek=weekKey(through);
+    let weekCursor=weekBounds(startWeek).start;
+    const throughWeekEnd=weekBounds(endWeek).end;
+    while(weekCursor<=throughWeekEnd){
+      const key=weekKey(weekCursor); const bounds=weekBounds(key);
+      if(bounds.end<=through){db.transaction(()=>settleWeek(userId,key))();settledCount+=config.units.one;}
+      weekCursor=shiftDate(weekCursor,config.weekly.daysPerWeek);
+    }
+    let monthCursor=monthOf(earliest); const throughMonth=monthOf(through);
+    while(monthCursor<=throughMonth){
+      if(monthEnd(monthCursor)<=through){db.transaction(()=>settleMonth(userId,monthCursor,user.timezone))();settledCount+=config.units.one;}
+      const [year,month]=monthCursor.split('-').map(Number);const next=new Date(Date.UTC(year,month,config.units.one));monthCursor=`${next.getUTCFullYear()}-${String(next.getUTCMonth()+config.units.one).padStart(config.units.two,'0')}`;
+    }
+    ledger.updateLastSettled(userId,through,nowIso());
+    return {settled:settledCount,through};
+  }
+
+  function isPeriodPass(userId,type,key){return settlements.get(userId,type,key)?.outcome==='PASS';}
+
+  function reconcileTransaction(userId,event){
+    ensureProgress(userId);
+    const before=event.data.before??null;const after=event.data.after??null;
+    const dates=new Set([before?.transactionDate,after?.transactionDate,event.data.transactionDate].filter(Boolean));
+    const results=[];
+    for(const date of dates){
+      if(!periodSealed(userId,'day',date)){
+        results.push(reconcileKey({userId,key:`XP-001:${date}`,ruleId:'XP-001',periodType:'day',periodKey:date,
+          desired:facts.currentLiveCount(userId,date,config.tracking.minQualifyingAmountPaise)>0,reasonCode:'TRANSACTION_TRACKED',sourceEventId:event.eventId}));
+      }
+      results.push(reconcileReview(userId,date,event.eventId));
+      results.push(reconcileSettledDay(userId,date,event.eventId));
+      const week=weekKey(date);
+      if(isPeriodPass(userId,'week',week))results.push(reconcileSettledWeek(userId,week,event.eventId));
+      const month=monthOf(date);
+      if(isPeriodPass(userId,'month',month))results.push(reconcileSettledMonth(userId,month,event.eventId));
+    }
+    const firstTransactionStillLive=facts.hasLiveTransaction(userId,config.tracking.minQualifyingAmountPaise);
+    results.push(reconcileKey({userId,key:'XP-006:FIRST_TRANSACTION',ruleId:'XP-006:FIRST_TRANSACTION',periodType:'once',periodKey:'FIRST_TRANSACTION',desired:firstTransactionStillLive,
+      reasonCode:firstTransactionStillLive?'FIRST_TRANSACTION':'RECORD_REMOVED',sourceEventId:event.eventId}));
+    return results.filter(Boolean);
+  }
+
+  function processInbound(event){
+    if(!inbound.has(event.eventType))return [];
+    ensureProgress(event.userId);
+    switch(event.eventType){
+      case 'USER_REGISTERED': return [];
+      case 'TIMEZONE_CHANGED': {
+        const since=new Date(clock.now().getTime()-config.timezone.observationWindowDays*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
+        if(outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since)>=config.timezone.flagChangeCount)
+          ledger.flag(event.userId,'TZ_HOPPING',event.localDate,{recentChanges:outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since),threshold:config.timezone.flagChangeCount},nowIso());
+        return [];
+      }
+      case 'TRANSACTION_CREATED': case 'TRANSACTION_UPDATED': case 'TRANSACTION_DELETED': case 'TRANSACTION_RESTORED': {
+        const result=reconcileTransaction(event.userId,event);
+        if(event.eventType==='TRANSACTION_CREATED'){
+          const since=new Date(clock.now().getTime()-config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
+          if(transactions.countNonLiveCreatedSince(event.userId,since,config.tracking.minQualifyingAmountPaise)>=config.rateLimits.bulkBackfillThreshold)
+            ledger.flag(event.userId,'BULK_BACKFILL',event.localDate,{threshold:config.rateLimits.bulkBackfillThreshold},nowIso());
+        }
+        return result;
+      }
+      case 'BUDGET_UPSERTED': {
+        const result=[];
+        if(event.data.created)result.push(reconcileKey({userId:event.userId,key:'XP-006:FIRST_BUDGET',ruleId:'XP-006:FIRST_BUDGET',periodType:'once',periodKey:'FIRST_BUDGET',desired:true,reasonCode:'FIRST_BUDGET',sourceEventId:event.eventId}));
+        if(event.data.oldAmountPaise!==null&&event.data.newAmountPaise>event.data.oldAmountPaise&&event.data.scope!=='daily_limit'){
+          const relevant=event.data.month??event.localDate;
+          const range=monthOf(relevant);
+          if(settlements.get(event.userId,'month',range)?.outcome==='FAIL')ledger.flag(event.userId,'LIMIT_RAISED_AFTER_FAIL',event.localDate,{scope:event.data.scope,month:range},nowIso());
+        }
+        return result.filter(Boolean);
+      }
+      case 'BUDGET_DELETED': return [];
+      case 'DAILY_REVIEW_COMPLETED': {
+        const result=[];
+        if(event.data.xpEligible)result.push(reconcileKey({userId:event.userId,key:`XP-002:${event.localDate}`,ruleId:'XP-002',periodType:'day',periodKey:event.localDate,desired:true,reasonCode:'DAILY_REVIEW_COMPLETED',sourceEventId:event.eventId}));
+        result.push(reconcileKey({userId:event.userId,key:'XP-006:FIRST_REVIEW',ruleId:'XP-006:FIRST_REVIEW',periodType:'once',periodKey:'FIRST_REVIEW',desired:true,reasonCode:'FIRST_REVIEW',sourceEventId:event.eventId}));
+        return result.filter(Boolean);
+      }
+      default:return [];
+    }
+  }
+
+  function processUser(userId){
+    if(!enabled)return null;
+    const entries=[];let levelUps=[];
+    for(let processed=0;processed<config.events.workerBatchSize;processed+=config.units.one){
+      const row=outbox.nextForUser(userId,nowIso()); if(!row)break;
+      try{
+        let effect=[];
+        db.transaction(()=>{
+          const user=facts.user(userId);
+          if(!user){outbox.markSkipped(row.seq,nowIso());return;}
+          effect=processInbound(row.payload);
+          outbox.markProcessed(row.seq,nowIso());
+        })();
+        for(const item of effect){if(item)entries.push({ruleId:item.ruleId,delta:item.lifetimeDelta,reasonCode:item.reasonCode,message:messageForReason(item.reasonCode)});if(item?.levelUps?.length)levelUps.push(...item.levelUps);}
+      }catch(error){
+        const attempts=row.attempts+config.units.one;const dead=attempts>=config.retry.maxAttempts;
+        const backoff=config.retry.backoffSeconds[Math.min(attempts-config.units.one,config.retry.backoffSeconds.length-config.units.one)];
+        const next=new Date(clock.now().getTime()+backoff*config.units.millisecondsPerSecond).toISOString();
+        outbox.markFailed(row.seq,attempts,next,error?.message??error,dead);
+        try{logger.error?.(`Gamification event ${row.eventId} failed${dead?' permanently':''}.`,error);}catch{ /* logger failures are ignored */ }
+      }
+    }
+    const progress=ledger.progress(userId);
+    if(!progress)return null;
+    const level=progress.maxLevelReached;
+    return {xpDelta:entries.reduce((sum,item)=>sum+item.delta,config.units.zero),lifetimeXp:progress.lifetimeXp,spendableXp:progress.spendableXp,level,
+      title:titleForLevel(level,config),levelUp:levelUps.at(-1)??null,entries};
+  }
+
+  function createReview(userId,{noSpend=false}){
+    if(!enabled)throw httpError(503,'GAMIFICATION_DISABLED','Gamification is currently unavailable.');
+    const user=facts.user(userId);if(!user)throw httpError(401,'UNAUTHENTICATED','Please sign in to continue.');
+    const now=clock.now();const date=localDateAt(now,user.timezone);const existing=facts.review(userId,date);
+    if(existing)return {review:{localDate:existing.localDate,completed:true,noSpend:Boolean(existing.noSpendDeclared),xpEligible:Boolean(existing.xpEligible),summary:JSON.parse(existing.summaryJson)},status:200,gamification:null};
+    const liveCount=facts.currentLiveCount(userId,date,config.tracking.minQualifyingAmountPaise);const hasExpense=facts.hasExpense(userId,date);
+    if(liveCount===0&&(!noSpend||hasExpense))throw httpError(422,'REVIEW_NOT_AVAILABLE','Log a qualifying transaction today, or declare no spending when you had no expenses today.');
+    const start=weekBounds(weekKey(date)).start;const xpEligible=noSpend?reviewNoSpendEligible(userId,date,start):liveCount>0;
+    const summary={liveCount,expenseExists:hasExpense,noSpendDeclared:noSpend,xpEligible};
+    const queued=db.transaction(()=>{
+      const inserted=facts.insertReview({userId,date,completedAt:now.toISOString(),noSpend,xpEligible,summary});
+      if(!inserted.inserted)return {review:inserted.review,created:false};
+      const event=enqueue({eventType:'DAILY_REVIEW_COMPLETED',userId,occurredAt:now.toISOString(),localDate:date,timezone:user.timezone,data:{noSpend,xpEligible,summary}});
+      return {review:inserted.review,created:true,event};
+    })();
+    const gamification=queued.created?processUser(userId):null;
+    return {review:{localDate:date,completed:true,noSpend:Boolean(queued.review.noSpendDeclared),xpEligible:Boolean(queued.review.xpEligible),summary},status:queued.created?201:200,gamification};
+  }
+
+  function dailyReviewStatus(userId){
+    const user=facts.user(userId);if(!user)throw httpError(401,'UNAUTHENTICATED','Please sign in to continue.');
+    const date=localDateAt(clock.now(),user.timezone);const review=facts.review(userId,date);
+    const liveCount=facts.currentLiveCount(userId,date,config.tracking.minQualifyingAmountPaise);const expense=facts.hasExpense(userId,date);
+    const start=weekBounds(weekKey(date)).start;const used=facts.reviewCountWeek(userId,start,date);
+    const capRemaining=Math.max(config.units.zero,config.tracking.noSpendDeclarationsPerWeekCap-used);
+    const blockers=[];
+    if(!review&&liveCount===0&&expense){blockers.push('NO_QUALIFYING_TRANSACTION','EXPENSE_EXISTS_FOR_NO_SPEND');}
+    else if(!review&&liveCount===0&&capRemaining===0){blockers.push('NO_QUALIFYING_TRANSACTION','NO_SPEND_CAP_EXHAUSTED');}
+    return {localDate:date,completed:Boolean(review),available:Boolean(review)||liveCount>0||(!expense&&capRemaining>0),blockers,
+      trackingCredited:Boolean(ledger.latestForKey(userId,`XP-001:${date}`)&&ledger.latestForKey(userId,`XP-001:${date}`).entryType!=='REVERSAL'),
+      noSpendCapRemaining:capRemaining,hasExpense:expense,liveTransactionCount:liveCount,
+      review:review?{noSpend:Boolean(review.noSpendDeclared),xpEligible:Boolean(review.xpEligible)}:null};
+  }
+
+  function awardSummary(userId){
+    const progress=ensureProgress(userId);if(!progress)return null;
+    const today=dailyReviewStatus(userId);const level=progress.maxLevelReached;const progressFields=levelProgress(progress.lifetimeXp,level,config);
+    const settlementPending=progress.lastSettledDate!==closeThrough(userId);
+    const unseen=ledger.unseen(userId,progress.lastSeenLedgerId);
+    return {lifetimeXp:progress.lifetimeXp,spendableXp:progress.spendableXp,level,title:titleForLevel(level,config),nextTitle:level>=config.levels.maxLevel?null:titleForLevel(level+config.units.one)||null,
+      ...progressFields,today:{trackingCredited:today.trackingCredited,reviewCompleted:today.completed,noSpendCapRemaining:today.noSpendCapRemaining},
+      unseen:collapseUnseen(unseen),lastEntries:ledger.lastEntries(userId,config.pagination.summaryLedgerCount).map((entry)=>({...entry,message:messageForReason(entry.reasonCode)})),
+      settlement:{lastSettledDate:progress.lastSettledDate,pending:settlementPending}};
+  }
+
+  function collapseUnseen(rows){
+    const groups=new Map();for(const row of rows){const key=row.entitlementKey??`ledger:${row.id}`;const list=groups.get(key)??[];list.push(row);groups.set(key,list);}
+    const result=[];for(const list of groups.values()){
+      const delta=list.reduce((sum,row)=>sum+row.delta,config.units.zero);
+      if(delta===config.units.zero&&list.length>config.units.one)continue;
+      const row=list.at(-1);result.push({...row,delta,message:messageForReason(row.reasonCode)});
+    }
+    return result.sort((a,b)=>a.id-b.id);
+  }
+
+  function acknowledgeFeed(userId,upToLedgerId){
+    const progress=ensureProgress(userId);if(!progress)throw httpError(401,'UNAUTHENTICATED','Please sign in to continue.');
+    const max=ledger.lastEntries(userId,config.events.workerBatchSize).reduce((current,row)=>Math.max(current,row.id),progress.lastSeenLedgerId);
+    if(upToLedgerId>max||upToLedgerId>progress.lastSeenLedgerId&&!ledger.ownsLedgerId(userId,upToLedgerId))throw httpError(422,'INVALID_LEDGER_CURSOR','Feed cursor is not part of your ledger.');
+    ledger.acknowledge(userId,upToLedgerId,nowIso());return {lastSeenLedgerId:Math.max(progress.lastSeenLedgerId,upToLedgerId)};
+  }
+
+  function summary(userId){
+    processUser(userId);return awardSummary(userId);
+  }
+
+  function ledgerPage(userId,input){
+    const {rows,total}=ledger.list(userId,input);
+    return {data:rows.map((entry)=>({...entry,message:messageForReason(entry.reasonCode)})),pagination:{page:input.page,pageSize:input.pageSize,total,totalPages:Math.ceil(total/input.pageSize)}};
+  }
+
+  function rebuildCache(userId){
+    ensureProgress(userId);
+    const totals=ledger.totals(userId);const rows=ledger.lastEntries(userId,config.events.workerBatchSize);
+    const level=Math.max(ledger.progress(userId).maxLevelReached,derivedLevel(totals.lifetimeXp,config));
+    ledger.rebuildProgress(userId,{lifetimeXp:totals.lifetimeXp,spendableXp:totals.spendableXp,maxLevelReached:level,lastLedgerId:totals.lastLedgerId,updatedAt:nowIso()});
+    return {progress:ledger.progress(userId),verifiedRows:rows.length};
+  }
+
+  function reconcileRange(userId, from, to) {
+    const changed=[];
+    for (const date of weekDateRange(from,to)) {
+      db.transaction(() => {
+        if (!periodSealed(userId,'day',date)) changed.push(reconcileKey({ userId, key:`XP-001:${date}`, ruleId:'XP-001', periodType:'day', periodKey:date,
+          desired:facts.currentLiveCount(userId,date,config.tracking.minQualifyingAmountPaise)>0, reasonCode:'RECORD_REMOVED' }));
+        changed.push(reconcileSettledDay(userId,date,null));
+        const week=weekKey(date); if(isPeriodPass(userId,'week',week)) changed.push(reconcileSettledWeek(userId,week,null));
+        const month=monthOf(date); if(isPeriodPass(userId,'month',month)) changed.push(reconcileSettledMonth(userId,month,null));
+      })();
+    }
+    db.transaction(() => {
+      const firstTransaction=facts.hasLiveTransaction(userId,config.tracking.minQualifyingAmountPaise);
+      changed.push(reconcileKey({ userId,key:'XP-006:FIRST_TRANSACTION',ruleId:'XP-006:FIRST_TRANSACTION',periodType:'once',periodKey:'FIRST_TRANSACTION',desired:firstTransaction,reasonCode:firstTransaction?'FIRST_TRANSACTION':'RECORD_REMOVED' }));
+      const firstReview=facts.hasAnyReview(userId);
+      changed.push(reconcileKey({ userId,key:'XP-006:FIRST_REVIEW',ruleId:'XP-006:FIRST_REVIEW',periodType:'once',periodKey:'FIRST_REVIEW',desired:firstReview,reasonCode:firstReview?'FIRST_REVIEW':'RECORD_REMOVED' }));
+      const firstBudget=facts.hasAnyBudget(userId);
+      changed.push(reconcileKey({ userId,key:'XP-006:FIRST_BUDGET',ruleId:'XP-006:FIRST_BUDGET',periodType:'once',periodKey:'FIRST_BUDGET',desired:firstBudget,reasonCode:firstBudget?'FIRST_BUDGET':'RECORD_REMOVED' }));
+    })();
+    return changed.filter(Boolean);
+  }
+
+  function adjust({userId,delta,reason,actor='system',allowDemotion=false}){
+    if(!Number.isSafeInteger(delta)||delta===config.units.zero||!reason?.trim())throw httpError(400,'INVALID_ADJUSTMENT','Provide a non-zero whole XP delta and a reason.');
+    return db.transaction(()=>{
+      const progress=ensureProgress(userId);if(!progress)throw httpError(404,'USER_NOT_FOUND','User not found.');
+      if(BigInt(progress.lifetimeXp)+BigInt(delta)<BigInt(config.units.zero))throw httpError(422,'XP_BELOW_ZERO','Adjustment cannot make lifetime XP negative.');
+      const newLifetime=safeTotal(BigInt(progress.lifetimeXp)+BigInt(delta));const newSpendable=safeTotal(BigInt(progress.spendableXp)+BigInt(delta));const derived=derivedLevel(newLifetime,config);
+      const maxLevel=allowDemotion?derived:Math.max(progress.maxLevelReached,derived);const now=nowIso();
+      const id=ledger.insert({userId,entryType:'ADJUSTMENT',ruleId:null,entitlementKey:null,transitionNo:null,idempotencyKey:`u${userId}:ADJ:${cryptoRandom()}`,
+        lifetimeDelta:delta,balanceDelta:delta,periodType:'admin',periodKey:localDate(userId),reversesEntryId:null,sourceEventId:null,reasonCode:'ADMIN_ADJUSTMENT',note:reason.trim(),configVersion:CONFIG_VERSION,actor,createdAt:now});
+      ledger.updateProgress(userId,{lifetimeXp:newLifetime,spendableXp:newSpendable,maxLevelReached:maxLevel,lastLedgerId:id,updatedAt:now});
+      return ledger.progress(userId);
+    })();
+  }
+
+  function requeueDead(userId=null){return outbox.requeueDead(userId);}
+  function listFlags(userId){return ledger.listFlags(userId);}
+
+  return {enabled,clock,enqueue,processUser,settleUser,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
+    publicRules:()=>({configVersion:CONFIG_VERSION,...config}),rebuildCache,reconcileRange,adjust,requeueDead,listFlags,localDate,
+    dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory}};
+}
+
+function cryptoRandom(){return randomUUID();}

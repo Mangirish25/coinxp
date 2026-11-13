@@ -12,6 +12,10 @@
     "lint": "eslint .",
     "db:migrate": "node src/db/migrate.js",
     "db:seed": "node src/db/seed.js",
+    "gamification:adjust": "node scripts/gamificationCli.js adjust",
+    "gamification:reconcile": "node scripts/gamificationCli.js reconcile",
+    "gamification:rebuild-cache": "node scripts/gamificationCli.js rebuild-cache",
+    "gamification:requeue-dead": "node scripts/gamificationCli.js requeue-dead",
     "db:reset": "node src/db/reset.js"
   },
   "dependencies": {

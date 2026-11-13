@@ -5,9 +5,10 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 export function createTransactionController(options) {
   const service = createTransactionService(options);
   return {
-    create: asyncHandler(async (req, res) =>
-      res.status(201).json(await service.create(req.user.id, req.body)),
-    ),
+    create: asyncHandler(async (req, res) => {
+      const result = await service.create(req.user.id, req.body, req.get('Idempotency-Key'));
+      res.status(result.status).json(result.transaction);
+    }),
     list: (req, res) => res.json(service.list(req.user.id, req.validatedQuery)),
     get: (req, res) =>
       res.json(service.get(req.user.id, req.validatedParams.id, req.validatedQuery.includeDeleted)),
@@ -18,7 +19,7 @@ export function createTransactionController(options) {
       await service.delete(req.user.id, req.validatedParams.id);
       res.status(204).end();
     }),
-    restore: (req, res) => res.json(service.restore(req.user.id, req.validatedParams.id)),
+    restore: asyncHandler(async (req, res) => res.json(await service.restore(req.user.id, req.validatedParams.id))),
     history: (req, res) => res.json(service.history(req.user.id, req.validatedParams.id)),
   };
 }

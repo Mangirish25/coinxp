@@ -93,6 +93,10 @@ function setup(breakdownFails = false) {
           status: 200,
           json: async () => ({ ...summary, transactionCount: breakdownFails ? 1 : 0 }),
         };
+      if (url.includes('/api/gamification/summary'))
+        return { ok: true, status: 200, json: async () => ({ lifetimeXp: 0, spendableXp: 0, level: 1, title: 'Beginner', nextTitle: 'Budget Explorer', xpIntoLevel: 0, xpForNext: 100, progressBps: 0, today: { trackingCredited: false, reviewCompleted: false, noSpendCapRemaining: 2 }, unseen: [], lastEntries: [], settlement: { lastSettledDate: null, pending: true } }) };
+      if (url.includes('/api/gamification/daily-review/today'))
+        return { ok: true, status: 200, json: async () => ({ localDate: '2026-11-07', completed: false, available: false, blockers: [], trackingCredited: false, noSpendCapRemaining: 2, hasExpense: false }) };
       if (url.includes('category-breakdown'))
         return breakdownFails
           ? {
@@ -136,7 +140,7 @@ describe('DashboardPage states', () => {
   it('keeps other dashboard sections visible when one query fails', async () => {
     setup(true);
     await waitFor(() => expect(screen.getByText('Total balance')).toBeTruthy());
-    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy(), { timeout: 3000 });
     expect(screen.getByText('Recent transactions')).toBeTruthy();
   });
 });

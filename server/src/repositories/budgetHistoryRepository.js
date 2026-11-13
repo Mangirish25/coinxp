@@ -25,5 +25,10 @@ export function createBudgetHistoryRepository(db) {
     listForUser(userId) {
       return listStatement.all(userId);
     },
+    listAsOf(userId, instant) {
+      return db.prepare(`SELECT scope,category_id AS categoryId,month,action,old_amount_paise AS oldAmountPaise,
+        new_amount_paise AS newAmountPaise,created_at AS createdAt,id FROM budget_history
+        WHERE user_id=? AND created_at<=? ORDER BY created_at,id`).safeIntegers().all(userId,instant);
+    },
   };
 }

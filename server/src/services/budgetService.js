@@ -11,9 +11,10 @@ import {
   daysInMonth,
   resolveBudget,
 } from './budgetCalculator.js';
-import { nowIso, todayInTimezone } from '../utils/dates.js';
+import { todayInTimezone } from '../utils/dates.js';
 import { formatINR, paiseToRupees } from '../utils/money.js';
 import { httpError } from '../utils/httpError.js';
+import { localDateAt } from '../gamification/dateMath.js';
 
 function monthEnd(month) {
   return `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
@@ -39,12 +40,13 @@ function sumSafePaise(values) {
   return Number(total);
 }
 
-export function createBudgetService({ db }) {
+export function createBudgetService({ db, gameEngine }) {
   const budgets = createBudgetRepository(db);
   const history = createBudgetHistoryRepository(db);
   const categories = createCategoryRepository(db);
   const transactions = createTransactionRepository(db);
   const users = createUserRepository(db);
+  const currentIso = () => (gameEngine?.clock.now() ?? new Date()).toISOString();
 
   function timezoneFor(userId) {
     const timezone = users.findTimezone(userId);
@@ -54,7 +56,8 @@ export function createBudgetService({ db }) {
 
   function validateMonthWindow(month, timezone) {
     if (!month) return;
-    const current = todayInTimezone(timezone).slice(0, 7);
+    const today = gameEngine?.clock?.now ? localDateAt(gameEngine.clock.now(), timezone) : todayInTimezone(timezone);
+    const current = today.slice(0, 7);
     const [year, number] = current.split('-').map(Number);
     const target = month.split('-').map(Number);
     const delta = (target[0] - year) * 12 + target[1] - number;
@@ -92,10 +95,10 @@ export function createBudgetService({ db }) {
           'Category is only allowed for category budgets.',
         );
       // future: budget changes may feed gamification anti-abuse (see budget_history)
-      return db.transaction(() => {
+      const result = db.transaction(() => {
         const current = budgets.findByKey(userId, input.scope, categoryId, input.month ?? null);
-        if (current?.amountPaise === input.amountPaise) return current;
-        const timestamp = nowIso();
+        if (current?.amountPaise === input.amountPaise) return { row: current, noOp: true };
+        const timestamp = currentIso();
         const saved = current
           ? budgets.updateAmount({
               userId,
@@ -122,8 +125,14 @@ export function createBudgetService({ db }) {
           newAmountPaise: input.amountPaise,
           createdAt: timestamp,
         });
-        return saved;
+        const localDate = gameEngine?.clock?.now ? localDateAt(gameEngine.clock.now(), timezone) : todayInTimezone(timezone);
+        gameEngine?.enqueue({ eventType: 'BUDGET_UPSERTED', userId, localDate, timezone,
+          occurredAt: timestamp, data: { budgetId: saved.id, scope: input.scope, categoryId, month: input.month ?? null,
+            oldAmountPaise: current?.amountPaise ?? null, newAmountPaise: input.amountPaise, created: !current } });
+        return { row: saved, noOp: false };
       })();
+      if (!result.noOp && gameEngine) { try { gameEngine.processUser(userId); } catch { /* committed budget changes remain successful */ } }
+      return result.row;
     },
 
     list(userId, filters) {
@@ -133,10 +142,12 @@ export function createBudgetService({ db }) {
     },
 
     delete(userId, id) {
-      return db.transaction(() => {
+      const timezone = timezoneFor(userId);
+      const localDate = gameEngine?.clock?.now ? localDateAt(gameEngine.clock.now(), timezone) : todayInTimezone(timezone);
+      const result = db.transaction(() => {
         const current = budgets.findById(userId, id);
         if (!current) throw httpError(404, 'BUDGET_NOT_FOUND', 'Budget not found.');
-        const timestamp = nowIso();
+        const timestamp = currentIso();
         history.insert({
           userId,
           budgetId: null,
@@ -149,7 +160,11 @@ export function createBudgetService({ db }) {
           createdAt: timestamp,
         });
         budgets.deleteOwned(userId, id);
+        gameEngine?.enqueue({ eventType: 'BUDGET_DELETED', userId, localDate, timezone,
+          occurredAt: timestamp, data: { budgetId: id, scope: current.scope, categoryId: current.categoryId, month: current.month, oldAmountPaise: current.amountPaise } });
+        return true;
       })();
+      if (result && gameEngine) { try { gameEngine.processUser(userId); } catch { /* committed budget changes remain successful */ } }
     },
 
     status(userId, requestedMonth) {
