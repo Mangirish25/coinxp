@@ -1,3 +1,5 @@
+import rules from '../rules.config.js';
+
 export function createLedgerRepository(db) {
   const numeric = (row, keys) => row && Object.fromEntries(Object.entries(row).map(([key, value]) => [key, keys.includes(key) && typeof value === 'bigint' ? safeInteger(value) : value]));
   return {
@@ -88,13 +90,21 @@ export function createLedgerRepository(db) {
         ? db.prepare(`SELECT DISTINCT entitlement_key AS key FROM xp_ledger WHERE user_id=? AND entitlement_key IS NOT NULL`).all(userId).map((row)=>row.key)
         : db.prepare(`SELECT DISTINCT entitlement_key AS key FROM xp_ledger WHERE user_id=? AND entitlement_key LIKE ?`).all(userId,`${prefix}%`).map((row)=>row.key);
     },
-    flag(userId, code, date, details, now) {
-      return db.prepare(`INSERT OR IGNORE INTO gamification_flags(user_id,code,local_date,details_json,created_at) VALUES(?,?,?,?,?)`).run(userId,code,date,JSON.stringify(details),now).changes > 0;
+    raiseFlag(userId, code, date, details, now) {
+      const dedupeKey = `${code}:${date}`;
+      return db.prepare(`INSERT OR IGNORE INTO gamification_flags(user_id,code,local_date,details_json,created_at,severity_points,evidence_json,detector_version,dedupe_key)
+        VALUES(?,?,?,?,?,?,?,?,?)`).run(userId,code,date,JSON.stringify(details),now,rules.integrity.scoring.points[code] ?? 0,JSON.stringify(details),rules.integrity.detectors.version,dedupeKey).changes > 0;
     },
+    flag(userId, code, date, details, now) { return this.raiseFlag(userId,code,date,details,now); },
     listFlags(userId) { return db.prepare(`SELECT code,local_date AS localDate,details_json AS detailsJson,created_at AS createdAt,status FROM gamification_flags WHERE user_id=? ORDER BY id DESC`).all(userId).map(row=>({...row,details:JSON.parse(row.detailsJson)})); },
     isKeyLocked(userId,key) {
+      const entitlementLock=db.prepare(`SELECT 1 AS yes FROM entitlement_locks WHERE user_id=? AND entitlement_key=? LIMIT 1`).get(userId,key);
+      if(entitlementLock)return true;
       const row=db.prepare(`SELECT 1 AS yes FROM gamification_flags WHERE user_id=? AND code='KEY_LOCKED' AND instr(details_json,?)>0 LIMIT 1`).get(userId,key);
       return row!==undefined;
+    },
+    lockEntitlement(userId,key,reason,now) {
+      return db.prepare(`INSERT OR IGNORE INTO entitlement_locks(user_id,entitlement_key,reason,created_at) VALUES(?,?,?,?)`).run(userId,key,reason,now).changes > 0;
     },
     recentFlagCount(userId,code,since) { return db.prepare(`SELECT count(*) AS count FROM gamification_flags WHERE user_id=? AND code=? AND created_at>=?`).get(userId,code,since).count; },
     updateLastSettled(userId, date, now) { db.prepare('UPDATE user_progress SET last_settled_date=?,updated_at=? WHERE user_id=?').run(date,now,userId); },

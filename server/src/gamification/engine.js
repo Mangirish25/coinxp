@@ -12,6 +12,7 @@ import { dayCutoff, effectiveBudgetFromHistory, transactionFactsAsOf } from './a
 import { createTransactionRepository } from '../repositories/transactionRepository.js';
 import { createBudgetHistoryRepository } from '../repositories/budgetHistoryRepository.js';
 import { httpError } from '../utils/httpError.js';
+import { createIntegrityRepository } from '../repositories/integrityRepository.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -38,6 +39,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   const settlements=createSettlementRepository(db);
   const transactions=createTransactionRepository(db);
   const budgetHistory=createBudgetHistoryRepository(db);
+  const integrity=createIntegrityRepository(db);
 
   function nowIso(){return clock.now().toISOString();}
   function localDate(userId, instant=clock.now()){
@@ -90,6 +92,10 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     else if(state==='REVERSED'&&desired){entryType='REINSTATE';const source=ledger.sourceAwardForKey(userId,key);delta=source?.lifetimeDelta??value;}
     else return null;
 
+    if ((entryType === 'AWARD' || entryType === 'REINSTATE') &&
+        (['XP-003','XP-004','XP-005'].includes(ruleId) && integrity.hasActiveHoldForScope(userId,'OUTCOME_XP',nowIso()) ||
+         ruleId === 'STR-006' && integrity.hasActiveHoldForScope(userId,'STREAK_XP',nowIso()))) return null;
+
     const transitionReasonCode = entryType === 'REVERSAL' && ['XP-001','XP-006:FIRST_TRANSACTION'].includes(ruleId)
       ? 'RECORD_REMOVED'
       : entryType === 'REINSTATE' ? 'RECORD_RESTORED' : reasonCode;
@@ -121,8 +127,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
       const title=titleForLevel(level,config);
       publish('LEVEL_UP',userId,{from:level-config.units.one,to:level,title,ledgerId:entryId},`LEVEL_UP:${userId}:${level}`);
     }
-    if(nextNo>=config.churn.flagAtTransitions)ledger.flag(userId,'HIGH_EDIT_CHURN',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());
-    if(nextNo>=config.churn.lockAtTransitions)ledger.flag(userId,'KEY_LOCKED',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());
+    if(nextNo>=config.churn.flagAtTransitions)ledger.raiseFlag(userId,'HIGH_EDIT_CHURN',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());
+    if(nextNo>=config.churn.lockAtTransitions){ledger.raiseFlag(userId,'KEY_LOCKED',localDate(userId),{entitlementKey:key,transitionNo:nextNo},nowIso());ledger.lockEntitlement(userId,key,'CHURN',nowIso());}
     return {id:entryId,entryType,ruleId,lifetimeDelta,reasonCode:transitionReasonCode,levelUps:levelUpsBetween(progress.maxLevelReached,maxLevelReached).map((level)=>({from:level-config.units.one,to:level,title:titleForLevel(level,config)}))};
   }
 
@@ -373,7 +379,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
       case 'TIMEZONE_CHANGED': {
         const since=new Date(clock.now().getTime()-config.timezone.observationWindowDays*config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
         if(outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since)>=config.timezone.flagChangeCount)
-          ledger.flag(event.userId,'TZ_HOPPING',event.localDate,{recentChanges:outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since),threshold:config.timezone.flagChangeCount},nowIso());
+          ledger.raiseFlag(event.userId,'TZ_HOPPING',event.localDate,{recentChanges:outbox.countEventTypeSince(event.userId,'TIMEZONE_CHANGED',since),threshold:config.timezone.flagChangeCount},nowIso());
         return [];
       }
       case 'TRANSACTION_CREATED': case 'TRANSACTION_UPDATED': case 'TRANSACTION_DELETED': case 'TRANSACTION_RESTORED': {
@@ -381,7 +387,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
         if(event.eventType==='TRANSACTION_CREATED'){
           const since=new Date(clock.now().getTime()-config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
           if(transactions.countNonLiveCreatedSince(event.userId,since,config.tracking.minQualifyingAmountPaise)>=config.rateLimits.bulkBackfillThreshold)
-            ledger.flag(event.userId,'BULK_BACKFILL',event.localDate,{threshold:config.rateLimits.bulkBackfillThreshold},nowIso());
+            ledger.raiseFlag(event.userId,'BULK_BACKFILL',event.localDate,{threshold:config.rateLimits.bulkBackfillThreshold},nowIso());
         }
         return result;
       }
@@ -391,7 +397,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
         if(event.data.oldAmountPaise!==null&&event.data.newAmountPaise>event.data.oldAmountPaise&&event.data.scope!=='daily_limit'){
           const relevant=event.data.month??event.localDate;
           const range=monthOf(relevant);
-          if(settlements.get(event.userId,'month',range)?.outcome==='FAIL')ledger.flag(event.userId,'LIMIT_RAISED_AFTER_FAIL',event.localDate,{scope:event.data.scope,month:range},nowIso());
+          if(settlements.get(event.userId,'month',range)?.outcome==='FAIL')ledger.raiseFlag(event.userId,'LIMIT_RAISED_AFTER_FAIL',event.localDate,{scope:event.data.scope,month:range},nowIso());
         }
         return result.filter(Boolean);
       }
@@ -559,3 +565,4 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
 }
 
 function cryptoRandom(){return randomUUID();}
+

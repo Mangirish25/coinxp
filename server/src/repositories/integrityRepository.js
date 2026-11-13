@@ -25,6 +25,10 @@ export function createIntegrityRepository(db) {
       return db.prepare(`SELECT id,scope,ends_at AS holdUntil,case_id AS caseId FROM reward_holds
         WHERE user_id=? AND status='ACTIVE' AND starts_at<=? AND ends_at>? ORDER BY ends_at DESC,id DESC LIMIT 1`).get(userId,now,now) ?? null;
     },
+    hasActiveHoldForScope(userId, scope, now) {
+      return Boolean(db.prepare(`SELECT 1 FROM reward_holds WHERE user_id=? AND scope=? AND status='ACTIVE'
+        AND starts_at<=? AND ends_at>? LIMIT 1`).get(userId,scope,now,now));
+    },
     latestNotice(userId) { return db.prepare('SELECT code FROM user_notices WHERE user_id=? ORDER BY id DESC LIMIT 1').get(userId)?.code ?? null; },
     eligibleAppealCase(userId, now, since) {
       return db.prepare(`SELECT c.id,c.status,c.resolution,c.appeal_count AS appealCount FROM integrity_cases c
