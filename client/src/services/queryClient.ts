@@ -5,7 +5,7 @@ export const queryClient = new QueryClient({
 });
 
 export function invalidateFinancialSummaries() {
-  for (const key of ['dashboard','analytics','budgets','gamification','streaks','badges','missions','shop','profile','activity','challenges']) {
+  for (const key of ['dashboard','analytics','budgets','gamification','streaks','badges','missions','shop','profile','activity','challenges','celebrations']) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('coinxp:integrity-refresh'));

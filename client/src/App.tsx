@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppShell } from './components/AppShell';
+import { CelebrationHost } from './components/CelebrationHost';
 import { GuestRoute } from './components/GuestRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -20,6 +21,11 @@ const ShopPage = lazy(() => import('./pages/ShopPage').then(({ ShopPage }) => ({
 const ChallengesPage = lazy(() => import('./pages/ChallengesPage').then(({ ChallengesPage }) => ({ default: ChallengesPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then(({ ProfilePage }) => ({ default: ProfilePage })));
 const ActivityPage = lazy(() => import('./pages/ActivityPage').then(({ ActivityPage }) => ({ default: ActivityPage })));
+
+function CelebrationHostForCurrentUser() {
+  const { user } = useAuth();
+  return <CelebrationHost userId={user?.id ?? null} />;
+}
 
 export function App() {
   return (
@@ -49,6 +55,7 @@ export function App() {
             </Route>
           </Route>
         </Routes>
+        <CelebrationHostForCurrentUser />
         </Suspense>
       </BrowserRouter>
     </AuthProvider>

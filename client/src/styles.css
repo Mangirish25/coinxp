@@ -37,10 +37,12 @@ a {
 .badge-medallion-sheen { animation: badge-sheen 6s ease-in-out infinite; }
 @keyframes badge-orbit { to { rotate: 360deg; } }
 @keyframes badge-sheen { 0%, 72%, 100% { filter: drop-shadow(0 0 0 transparent); } 84% { filter: drop-shadow(0 0 4px currentColor); } }
+@keyframes celebration-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .streak-flame-svg, .streak-flame-animated, .streak-flame-risk, .streak-flame-settling,
   .streak-flame-halo, .streak-flame-rays, .streak-flame-ember, .badge-medallion-motion,
   .badge-medallion-sheen, .badge-orbit { animation: none !important; }
+  .celebration-enter { animation: none !important; }
 }
 
 @media print {
