@@ -37,6 +37,9 @@ function BadgeCard({ badge, onSelect }: { badge: BadgeFamily; onSelect: (badge: 
 export function BadgesPage() {
   const catalog = useQuery({ queryKey: ['badges', 'catalog'], queryFn: badgeApi.catalog });
   const [selected, setSelected] = useState<BadgeFamily | null>(null);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [collectionFilter, setCollectionFilter] = useState<'ALL' | 'EARNED' | 'LOCKED'>('ALL');
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -51,14 +54,27 @@ export function BadgesPage() {
     }
   }, [selected]);
   const categories = [...new Set(catalog.data?.data.map(({ category }) => category) ?? [])];
+  const visibleBadges = (catalog.data?.data ?? []).filter((badge) => {
+    const matchesSearch = titleFor(badge.slug).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
+    const matchesCategory = categoryFilter === 'ALL' || badge.category === categoryFilter;
+    const earned = badge.tiers.some(({ status }) => status === 'ACTIVE');
+    const matchesCollection = collectionFilter === 'ALL' || (collectionFilter === 'EARNED' ? earned : !earned);
+    return matchesSearch && matchesCategory && matchesCollection;
+  });
   return <section className="mx-auto max-w-6xl space-y-6">
     <header><p className="text-sm font-medium text-brand-600">Small wins, built over time</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Badges</h1><p className="mt-2 max-w-2xl text-sm text-ink-500">Badges come from recorded habits and settled progress. Earned badges stay in your collection.</p></header>
     {catalog.isLoading && <div aria-label="Loading badges" className="grid gap-4 md:grid-cols-2"><div className="h-60 animate-pulse motion-reduce:animate-none rounded-2xl bg-white" /><div className="h-60 animate-pulse motion-reduce:animate-none rounded-2xl bg-white" /></div>}
     {catalog.isError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">Badges could not load. <button className="underline" onClick={() => void catalog.refetch()}>Retry</button></div>}
     {catalog.data && <>
+      <div className="grid gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-3">
+        <label className="text-sm font-medium">Search badges<input value={search} onChange={(event) => setSearch(event.target.value)} type="search" className="mt-1 min-h-11 w-full rounded-lg border px-3 font-normal" placeholder="Search your collection" /></label>
+        <label className="text-sm font-medium">Category<select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border bg-white px-3 font-normal"><option value="ALL">All categories</option>{categories.map((category) => <option key={category} value={category}>{categoryLabels[category] ?? category}</option>)}</select></label>
+        <label className="text-sm font-medium">Collection<select value={collectionFilter} onChange={(event) => setCollectionFilter(event.target.value as typeof collectionFilter)} className="mt-1 min-h-11 w-full rounded-lg border bg-white px-3 font-normal"><option value="ALL">All badges</option><option value="EARNED">Earned</option><option value="LOCKED">Not yet earned</option></select></label>
+      </div>
       {catalog.data.hiddenRemaining > 0 && <p className="flex items-center gap-2 rounded-xl border bg-white p-4 text-sm"><LockKeyhole size={16} aria-hidden="true" />{catalog.data.hiddenRemaining} hidden {catalog.data.hiddenRemaining === 1 ? 'badge remains' : 'badges remain'} undiscovered.</p>}
       {catalog.data.data.length === 0 && <p className="rounded-2xl border bg-white p-6 text-sm text-ink-600">Your badge collection will grow as you build steady money habits.</p>}
-      {categories.map((category) => <section key={category} aria-labelledby={`badge-${category}`}><h2 id={`badge-${category}`} className="mb-3 text-lg font-semibold">{categoryLabels[category] ?? category}</h2><div className="grid gap-4 lg:grid-cols-2">{catalog.data?.data.filter((badge) => badge.category === category).map((badge) => <BadgeCard key={badge.slug} badge={badge} onSelect={setSelected} />)}</div></section>)}
+      {catalog.data.data.length > 0 && visibleBadges.length === 0 && <p role="status" className="rounded-2xl border bg-white p-6 text-sm text-ink-600">No badges match those filters. Try a different search or category.</p>}
+      {categories.filter((category) => visibleBadges.some((badge) => badge.category === category)).map((category) => <section key={category} aria-labelledby={`badge-${category}`}><h2 id={`badge-${category}`} className="mb-3 text-lg font-semibold">{categoryLabels[category] ?? category}</h2><div className="grid gap-4 lg:grid-cols-2">{visibleBadges.filter((badge) => badge.category === category).map((badge) => <BadgeCard key={badge.slug} badge={badge} onSelect={setSelected} />)}</div></section>)}
     </>}
     <dialog ref={dialogRef} aria-label={selected ? `${titleFor(selected.slug)} badge details` : 'Badge details'} className="w-[min(94vw,38rem)] rounded-3xl p-0 shadow-2xl backdrop:bg-ink-900/50" onClose={() => setSelected(null)} onCancel={() => setSelected(null)}>
       {selected && <div className="relative p-6 sm:p-8"><button type="button" autoFocus onClick={() => setSelected(null)} aria-label="Close badge details" className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full hover:bg-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700"><X aria-hidden="true" /></button>
