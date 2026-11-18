@@ -26,6 +26,10 @@ describe('Part 7 streak API', () => {
     const response = await request(app).get('/api/streaks').set('Cookie', cookie).expect(200);
     expect(response.body.tracking).toMatchObject({ status: 'NONE', current: 0, longest: 0, trackedToday: false });
     expect(response.body.freezes).toMatchObject({ inventory: 0, cap: 2 });
+    expect(response.body.week).toHaveLength(7);
+    expect(response.body.week[0].date).toBe('2026-11-09');
+    expect(response.body.week[6].date).toBe('2026-11-15');
+    expect(response.body).toMatchObject({ lastPeriod: { date: response.body.through, status: 'NONE' }, milestones: { reached: [], next: { days: 3, xp: 10 } } });
     expect(db.prepare('SELECT count(*) AS count FROM streak_periods').get().count).toBe(0);
   });
 

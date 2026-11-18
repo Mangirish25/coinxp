@@ -21,6 +21,23 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+.streak-flame-svg { height: 100%; width: 100%; opacity: var(--flame-opacity); filter: saturate(var(--flame-saturation)); transform: scale(var(--flame-scale)); transform-origin: 50% 70%; }
+.streak-flame-animated { animation: flame-flicker var(--flame-duration) ease-in-out infinite alternate; }
+.streak-flame-risk { animation: flame-risk 500ms ease-in-out infinite alternate; }
+.streak-flame-settling { animation: flame-settle 1800ms ease-in-out infinite alternate; }
+.streak-flame-halo { transform-origin: 50px 51px; animation: flame-halo 5s linear infinite; }
+.streak-flame-rays { transform-origin: 50px 50px; animation: flame-halo 20s linear infinite; }
+.streak-flame-ember { animation: flame-ember 1600ms ease-out var(--ember-delay) infinite; }
+@keyframes flame-flicker { from { transform: scale(var(--flame-scale)) skewX(-1deg); } to { transform: scale(calc(var(--flame-scale) * 1.025)) skewX(1deg); } }
+@keyframes flame-risk { from { transform: translateX(-1px) scale(var(--flame-scale)); } to { transform: translateX(1px) scale(var(--flame-scale)); } }
+@keyframes flame-settle { from { opacity: .78; } to { opacity: 1; } }
+@keyframes flame-halo { to { transform: rotate(360deg); } }
+@keyframes flame-ember { from { opacity: 0; transform: translateY(8px); } 35% { opacity: .9; } to { opacity: 0; transform: translateY(-8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .streak-flame-svg, .streak-flame-animated, .streak-flame-risk, .streak-flame-settling,
+  .streak-flame-halo, .streak-flame-rays, .streak-flame-ember { animation: none !important; }
+}
+
 @media print {
   @page {
     margin: 16mm;

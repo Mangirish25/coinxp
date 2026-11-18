@@ -238,6 +238,11 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
     const settlingDate = localHour < config.settlement.cutoffLocalHour ? shiftDate(today, -config.units.one) : null;
     const reachedMilestones = new Set(streaks.milestones(userId, TRACKING));
     const nextMilestone = config.streaks.tracking.milestones.find((milestone) => !reachedMilestones.has(milestone.days)) ?? null;
+    const currentWeek = weekBounds(weekKey(today));
+    const week = calendar(userId, currentWeek.start, currentWeek.end).days.map((day) => ({
+      ...day, provisional: day.date === today && trackedToday && day.status === 'TODAY_OPEN',
+    }));
+    const lastPeriod = { date: through, status: streaks.period(userId, TRACKING, through)?.status ?? 'NONE' };
     return { tracking: { status: stored.status, current: stored.currentLength, longest: stored.longestLength, trackedToday, atRisk,
       freezeWouldProtect: active && stored.currentLength >= config.streaks.tracking.minRunLengthForFreeze &&
         stored.consecutiveFrozen < config.streaks.tracking.freeze.maxConsecutiveFrozen && freezeCount > 0,
@@ -246,6 +251,7 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
         const row = streaks.ensureState(userId, type, iso(clock));
         return [type, { status: row.status, current: row.currentLength, longest: row.longestLength }];
       })), freezes: { inventory: freezeCount, cap: config.streaks.tracking.freeze.maxHeld }, through,
+      week, lastPeriod, milestones: { reached: [...reachedMilestones], next: nextMilestone },
       recentEvents: gameEngine.dependencies.outbox.recentStreakEvents(userId, config.pagination.summaryLedgerCount) };
   }
 

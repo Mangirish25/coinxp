@@ -17,6 +17,9 @@ export interface StreakSummary {
   freezes: { inventory: number; cap: number };
   through: string;
   recentEvents: Array<{ eventId: string; eventType: string; occurredAt: string; data: Record<string, unknown> }>;
+  week: Array<{ date: string; status: StreakPeriodStatus; secondary: Record<string, string>; provisional: boolean }>;
+  lastPeriod: { date: string; status: StreakPeriodStatus };
+  milestones: { reached: number[]; next: { days: number; xp: number } | null };
 }
 
 export interface StreakCalendar {
