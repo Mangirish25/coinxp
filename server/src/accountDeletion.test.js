@@ -53,6 +53,10 @@ describe('USR-008 account deletion grace, restore and erasure', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE user_id=?').get(account.user.id).n).toBe(0);
     expect(db.prepare('SELECT COUNT(*) AS n FROM transaction_audit WHERE user_id=?').get(account.user.id).n).toBe(0);
     expect(db.prepare('SELECT COUNT(*) AS n FROM user_progress WHERE user_id=?').get(account.user.id).n).toBe(0);
+    const remainingUserRows = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .all().filter(({ name }) => name !== 'account_deletions' && db.pragma(`table_info(\"${name}\")`).some(({ name: column }) => column === 'user_id'))
+      .filter(({ name }) => db.prepare(`SELECT COUNT(*) AS n FROM \"${name}\" WHERE user_id=?`).get(account.user.id).n > 0);
+    expect(remainingUserRows).toEqual([]);
     expect(db.prepare("SELECT COUNT(*) AS n FROM categories WHERE user_id IS NULL AND name='Food'").get().n).toBe(1);
   });
 
