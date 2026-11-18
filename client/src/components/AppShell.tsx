@@ -17,6 +17,7 @@ const links = [
   { to: '/shop', label: 'XP Shop', icon: ShoppingBag },
   { to: '/challenges', label: 'Challenges', icon: Swords },
   { to: '/profile', label: 'Profile', icon: UserRound },
+  { to: '/activity', label: 'Activity', icon: Activity },
 ];
 
 export function AppShell() {

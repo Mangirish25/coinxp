@@ -17,6 +17,7 @@ import { MissionsPage } from './pages/MissionsPage';
 import { ShopPage } from './pages/ShopPage';
 import { ChallengesPage } from './pages/ChallengesPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ActivityPage } from './pages/ActivityPage';
 
 export function App() {
   return (
@@ -41,6 +42,7 @@ export function App() {
               <Route path="shop" element={<ShopPage />} />
               <Route path="challenges" element={<ChallengesPage />} />
               <Route path="profile" element={<ProfilePage />} />
+              <Route path="activity" element={<ActivityPage />} />
             </Route>
           </Route>
         </Routes>

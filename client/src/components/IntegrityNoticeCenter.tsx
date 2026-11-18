@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Bell, ShieldAlert } from 'lucide-react';
 import { integrityApi } from '../services/integrityApi';
 import type { IntegrityNotice, IntegrityStatus } from '../types/integrity';
+import { activityApi } from '../services/activityApi';
+import type { NotificationPreference } from '../types/activity';
 
 export function IntegrityNoticeCenter() {
   const [status, setStatus] = useState<IntegrityStatus | null>(null);
@@ -9,11 +11,13 @@ export function IntegrityNoticeCenter() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [preferences, setPreferences] = useState<NotificationPreference[]>([]);
   const refresh = useCallback(async () => {
     try {
       const [nextStatus, nextNotices] = await Promise.all([integrityApi.status(), integrityApi.notices()]);
       setStatus(nextStatus);
       setNotices(nextNotices.data);
+      setPreferences((await activityApi.preferences()).preferences);
     } catch { setStatus(null); }
   }, []);
   useEffect(() => {
@@ -32,6 +36,12 @@ export function IntegrityNoticeCenter() {
     try { await integrityApi.appeal(message); setMessage(''); setFeedback('Appeal submitted.'); await refresh(); }
     catch (error) { setFeedback(error instanceof Error ? error.message : 'Could not submit appeal.'); }
   }
+  async function togglePreference(preference: NotificationPreference) {
+    if (!preference.mutable) return;
+    const next = { category: preference.category, enabled: !preference.enabled };
+    const saved = await activityApi.savePreferences([next]);
+    setPreferences(saved.preferences);
+  }
   return (
     <div className="relative mt-4">
       <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-ink-500 hover:bg-canvas" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
@@ -47,6 +57,7 @@ export function IntegrityNoticeCenter() {
         {status?.canAppeal && <form className="mt-3 space-y-2" onSubmit={(event) => void appeal(event)}><label className="block text-sm font-medium">Appeal<textarea className="mt-1 w-full rounded-xl border border-black/10 p-2" maxLength={500} required value={message} onChange={(event) => setMessage(event.target.value)} /></label><button className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white">Submit appeal</button></form>}
         {feedback && <p role="status" className="mt-2 text-sm text-ink-600">{feedback}</p>}
         {status?.unreadNotices ? <button className="mt-3 text-sm font-medium text-brand-700 underline" onClick={() => void acknowledge()}>Mark updates read</button> : null}
+        <details className="mt-4 border-t border-black/5 pt-3"><summary className="cursor-pointer text-sm font-medium">Notification preferences</summary><div className="mt-2 space-y-2">{preferences.map((preference)=><label key={preference.category} className="flex items-center justify-between gap-2 text-xs"><span>{preference.category.replaceAll('_',' ')}{!preference.mutable&&<span className="ml-1 text-ink-400">(always on)</span>}</span><input type="checkbox" checked={preference.enabled} disabled={!preference.mutable} onChange={()=>void togglePreference(preference)} aria-label={`${preference.category} notifications`} /></label>)}</div></details>
       </section>}
     </div>
   );
