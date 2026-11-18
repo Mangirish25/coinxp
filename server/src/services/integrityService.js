@@ -9,7 +9,7 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
   return {
     notices(userId, filters) {
       const result = repository.listNotices(userId, filters);
-      const priority = { RESTRICTION: 5, XP_CHANGE: 4, WARNING: 3, REVIEW: 2, INFO: 1 };
+      const priority = rules.rewards.notifications.priority;
       return { data: result.data.map((notice) => ({ ...notice, message: integrityMessageForCode(notice.code,notice.data) }))
         .sort((a,b) => priority[b.kind]-priority[a.kind] || b.id-a.id),
       pagination: { page: filters.page, pageSize: filters.pageSize, total: result.total, totalPages: Math.ceil(result.total/filters.pageSize) } };

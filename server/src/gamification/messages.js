@@ -20,6 +20,19 @@ const templates = Object.freeze({
 });
 
 const integrityMessages = Object.freeze({
+  BADGE_UNLOCKED: 'You unlocked a badge. See your profile for your progress.',
+  BADGE_BACKFILL_SUMMARY: 'Your badge progress has been updated from your existing activity.',
+  BADGE_REVOKED: 'A badge was removed after an administrator review.',
+  MISSION_ASSIGNED: 'A new mission is ready for you.',
+  MISSION_COMPLETED: 'You completed a mission and earned XP.',
+  MISSION_EXPIRED: 'A mission period has ended. A new mission will arrive in its next cycle.',
+  CHALLENGE_STARTED: 'Your challenge is scheduled to begin soon.',
+  CHALLENGE_COMPLETED: 'You completed a challenge and earned XP.',
+  CHALLENGE_FAILED: 'Your challenge period has ended.',
+  CHALLENGE_CANCELLED: 'Your pending challenge was cancelled and its XP was refunded.',
+  CHALLENGE_ABANDONED: 'Your active challenge was abandoned.',
+  PURCHASE_COMPLETED: 'Your XP shop purchase is complete.',
+  PURCHASE_REFUNDED: 'Your XP shop purchase was refunded.',
   INTEGRITY_NUDGE: 'We noticed some unusual activity around reward records. Your financial features are unaffected.',
   HOLD_STARTED: 'Some outcome rewards are temporarily paused while we review activity. Your financial features are unaffected. You can submit an appeal.',
   APPEAL_RECEIVED: 'Your appeal has been received for review.',

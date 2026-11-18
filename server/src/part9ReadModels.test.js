@@ -28,7 +28,16 @@ describe('Part 9 activity and notification preferences', () => {
     expect(initial.body.preferences.find(({category})=>category==='REVIEW')).toMatchObject({enabled:true,mutable:false});
     await request(app).put('/api/notifications/preferences').set('Cookie',cookie).send({preferences:[{category:'REWARD',enabled:false}]}).expect(200)
       .expect(({body})=>expect(body.preferences.find(({category})=>category==='REWARD').enabled).toBe(false));
+    const savedAt=db.prepare("SELECT updated_at AS at FROM notification_preferences WHERE user_id=1 AND category='REWARD'").get().at;
+    await request(app).put('/api/notifications/preferences').set('Cookie',cookie).send({preferences:[{category:'REWARD',enabled:false}]}).expect(200);
+    expect(db.prepare("SELECT updated_at AS at FROM notification_preferences WHERE user_id=1 AND category='REWARD'").get().at).toBe(savedAt);
     await request(app).put('/api/notifications/preferences').set('Cookie',cookie).send({preferences:[{category:'REVIEW',enabled:false}]}).expect(422);
     expect(db.prepare('SELECT count(*) AS n FROM notification_preferences WHERE user_id=1').get().n).toBe(1);
+  });
+  it('NOT-004: notice categories sort by the configured priority',async()=>{
+    const at=new Date().toISOString();
+    for(const [index,kind] of ['INFO','STREAK','PROGRESS','REWARD','REVIEW','WARNING','XP_CHANGE','RESTRICTION'].entries())db.prepare(`INSERT INTO user_notices(user_id,kind,code,data_json,dedupe_key,created_at) VALUES(?,?,?,'{}',?,?)`).run(1,kind,'TEST_NOTICE',`notice-${index}`,at);
+    const response=await request(app).get('/api/integrity/notices?page=1&pageSize=20').set('Cookie',cookie).expect(200);
+    expect(response.body.data.slice(0,8).map(({kind})=>kind)).toEqual(['RESTRICTION','XP_CHANGE','WARNING','REVIEW','REWARD','PROGRESS','STREAK','INFO']);
   });
 });

@@ -39,7 +39,7 @@ export function IntegrityNoticeCenter() {
   async function togglePreference(preference: NotificationPreference) {
     if (!preference.mutable) return;
     const next = { category: preference.category, enabled: !preference.enabled };
-    try { const saved = await activityApi.savePreferences([next]); setPreferences(saved.preferences); }
+    try { const saved = await activityApi.savePreferences([next]); setPreferences(saved.preferences); window.dispatchEvent(new CustomEvent('coinxp:notification-preferences-changed',{detail:saved.preferences})); }
     catch (error) { setFeedback(error instanceof Error ? error.message : 'Could not update preferences.'); }
   }
   return (

@@ -111,7 +111,7 @@ export function AppShell() {
       <main className="min-w-0 flex-1 px-5 py-8 md:px-10 md:py-12">
         <Outlet />
       </main>
-      <GamificationToastHost />
+      <GamificationToastHost userId={user?.id??null} />
     </div>
   );
 }
