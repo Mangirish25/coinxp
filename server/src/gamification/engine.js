@@ -122,6 +122,19 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return ledger.ensureProgress(userId,localDateAt(user.createdAt,user.timezone),nowIso());
   }
 
+  function recordSpend({userId,purchaseId,costXp,itemType,now=nowIso()}) {
+    if(!Number.isSafeInteger(costXp)||costXp<0)throw new TypeError('Purchase XP cost must be a non-negative integer.');
+    const progress=ensureProgress(userId);
+    if(!progress)throw httpError(404,'USER_NOT_FOUND','User not found.');
+    if(progress.spendableXp<costXp)throw httpError(422,'INSUFFICIENT_XP','You do not have enough spendable XP for this item.');
+    const entryId=ledger.insert({userId,entryType:'SPEND',ruleId:'XP-013',entitlementKey:null,transitionNo:null,
+      idempotencyKey:`u${userId}:SPEND:${purchaseId}`,lifetimeDelta:0,balanceDelta:-costXp,periodType:'once',periodKey:`PURCHASE:${purchaseId}`,
+      reversesEntryId:null,sourceEventId:null,reasonCode:`PURCHASE_${itemType}`,note:null,configVersion:CONFIG_VERSION,actor:'user',createdAt:now});
+    ledger.updateProgress(userId,{lifetimeXp:progress.lifetimeXp,spendableXp:progress.spendableXp-costXp,
+      maxLevelReached:progress.maxLevelReached,lastLedgerId:entryId,updatedAt:now});
+    return {entryId,spendableXp:progress.spendableXp-costXp,lifetimeXp:progress.lifetimeXp,level:progress.maxLevelReached};
+  }
+
   function awardValue(ruleId) {
     const values={
       'XP-001':config.xp.dailyTracking,'XP-002':config.xp.dailyReview,'XP-003':config.xp.dailyAdherence,
@@ -762,6 +775,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
     advanceRewards:(userId)=>{ const missionResults=missions.advance(userId,closeThrough(userId),(id,now)=>integrity.hasActiveHoldForScope(id,'OUTCOME_XP',now)); missions.current(userId); return [...missionResults,...missions.releaseDeferred(userId),...badges.releaseDeferred(userId),...badges.evaluate(userId)]; },
     badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId), rerollMission:(userId,slot)=>missions.reroll(userId,slot),
+    rewardConfig:()=>config.rewards, rewardUnits:()=>config.units, purchaseState:(userId)=>{const state=ensureProgress(userId);return {level:state?.maxLevelReached??0,spendableXp:state?.spendableXp??0,lifetimeXp:state?.lifetimeXp??0};},
+    recordSpend, emitRewardEvent:(type,userId,data,key)=>publish(type,userId,data,key),
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory,rewards,missions:missionRepository}};
 }
 

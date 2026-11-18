@@ -130,6 +130,8 @@ const rulesConfig = Object.freeze({
       ]),
     }),
     shop: Object.freeze({
+      freezePurchaseWindowDays: 30,
+      purchaseWindowSeconds: 60,
       freezePurchasesPerRolling30Days: 4,
       purchasesPerMinute: 10,
       items: Object.freeze([

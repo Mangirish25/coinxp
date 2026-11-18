@@ -277,22 +277,24 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
       pagination: { page, pageSize, total: rows.length, totalPages: Math.ceil(rows.length / pageSize) } };
   }
 
-  function grantFreeze(userId, { source = 'PURCHASE', idempotencyKey }) {
+  function grantFreeze(userId, { source = 'PURCHASE', idempotencyKey, outerTransaction = false }) {
     const allowedReasons = new Set(['PURCHASE', 'ADMIN']);
     if (!allowedReasons.has(source) || typeof idempotencyKey !== 'string' || !idempotencyKey.trim()) {
       throw new TypeError('grantFreeze requires a supported source and idempotency key.');
     }
     const user = facts.user(userId);
-    if (!user) return { granted: false, inventory: 0 };
-    return db.transaction(() => {
+    if (!user) return { granted: false, skipped: true, reason: 'USER_NOT_FOUND', inventory: 0 };
+    const grant = () => {
       const now = clock.now();
       const inventory = freezes.inventoryAsOf(userId, now.toISOString());
-      if (inventory >= config.streaks.tracking.freeze.maxHeld) return { granted: false, inventory };
+      if (inventory >= config.streaks.tracking.freeze.maxHeld) return { granted: false, skipped: true, reason: 'FREEZE_INVENTORY_FULL', inventory };
       const granted = freezes.insert({ userId, delta: config.streaks.tracking.freeze.starterCount, reason: source,
         effectiveAt: now.toISOString(), effectiveLocalDate: gameEngine.localDate(userId, now), idempotencyKey: `FRZ:${source}:${userId}:${idempotencyKey}`,
         actor: source === 'ADMIN' ? 'admin' : 'purchase', createdAt: now.toISOString() });
-      return { granted, inventory: freezes.inventoryAsOf(userId, now.toISOString()) };
-    }).immediate();
+      return { granted, skipped: !granted, reason: granted ? null : 'ALREADY_GRANTED', inventory: freezes.inventoryAsOf(userId, now.toISOString()) };
+    };
+    if (outerTransaction) return grant();
+    return db.transaction(grant).immediate();
   }
 
   return { advanceUser, summary, calendar, freezeHistory, today: (userId) => gameEngine.localDate(userId, clock.now()),
