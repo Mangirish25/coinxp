@@ -85,6 +85,9 @@ describe('transaction and category APIs', () => {
       .prepare('SELECT amount_paise FROM transactions WHERE id = ?')
       .get(response.body.id);
     expect(row.amount_paise).toBe(25050);
+    const activity = db.prepare("SELECT summary_code AS summaryCode,data_json AS dataJson FROM activity_items WHERE user_id=1 AND kind='TRANSACTION'").get();
+    expect(activity.summaryCode).toBe('TRANSACTION_CREATED');
+    expect(JSON.parse(activity.dataJson)).not.toHaveProperty('amountPaise');
     expect(
       (
         await request(app)

@@ -24,6 +24,7 @@ import { createBadgeService } from './rewards/badges.js';
 import { createMissionRepository } from '../repositories/missionRepository.js';
 import { createMissionService } from '../services/missionService.js';
 import { createChallengeService } from '../services/challengeService.js';
+import { activityProjection } from './rewards/activityProjection.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -84,6 +85,14 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const user=facts.user(userId);
     const envelope=buildEnvelope({eventType,userId,data,localDate:date,timezone:user?.timezone},clock);
     enqueueRow(db,envelope,{status:'PUBLISHED',dedupeKey});
+    writeActivity(eventType,userId,data,envelope.occurredAt,dedupeKey);
+  }
+
+  function writeActivity(eventType,userId,data,occurredAt,dedupeKey) {
+    const item=activityProjection(eventType,data);
+    if(!item)return;
+    try { rewards.insertActivity({userId,kind:item.kind,refType:item.refType,refId:item.refId,occurredAt,summaryCode:item.summaryCode,data:item.data,dedupeKey:dedupeKey??`${eventType}:${userId}:${occurredAt}`}); }
+    catch(error) { logger.error?.('Could not update the activity read model.',{eventType,error}); }
   }
 
   function raiseIntegrityFlag(userId, code, windowKey, evidence) {
@@ -433,6 +442,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const eventDate=localDateAt(new Date(occurredAt),user?.timezone??'UTC');
     const envelope=buildEnvelope({eventType,userId,data,occurredAt,localDate:eventDate,timezone:user?.timezone},clock);
     enqueueRow(db,envelope,{status:'PUBLISHED',dedupeKey});
+    writeActivity(eventType,userId,data,occurredAt,dedupeKey);
     return envelope;
   }
 
@@ -509,6 +519,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
         return [];
       }
       case 'TRANSACTION_CREATED': case 'TRANSACTION_UPDATED': case 'TRANSACTION_DELETED': case 'TRANSACTION_RESTORED': {
+        writeActivity(event.eventType,event.userId,event.data,event.occurredAt,`ACTIVITY:${event.eventId}`);
         const result=reconcileTransaction(event.userId,event);
         if(event.eventType==='TRANSACTION_CREATED'){
           const since=new Date(clock.now().getTime()-config.units.hoursPerDay*config.units.minutesPerHour*config.units.secondsPerMinute*config.units.millisecondsPerSecond).toISOString();
