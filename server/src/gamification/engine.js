@@ -233,6 +233,11 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     for(const level of levelUpsBetween(progress.maxLevelReached,maxLevelReached)){
       const title=titleForLevel(level,config);
       publish('LEVEL_UP',userId,{from:level-config.units.one,to:level,title,ledgerId:entryId},`LEVEL_UP:${userId}:${level}`);
+      const titleBefore=titleForLevel(level-config.units.one,config);
+      const titleAfter=titleForLevel(level,config);
+      integrity.insertNotice({userId,kind:'PROGRESS',code:'LEVEL_UP',data:{fromLevel:level-config.units.one,toLevel:level,
+        titleBefore,titleAfter,titleChanged:titleBefore!==titleAfter,lifetimeXp,progressBps:levelProgress(lifetimeXp,level,config).progressBps},
+        dedupeKey:`LEVEL_UP:${userId}:${level}`,createdAt:nowIso()});
     }
     if(nextNo>=config.churn.flagAtTransitions)raiseIntegrityFlag(userId,'HIGH_EDIT_CHURN',localDate(userId),{entitlementKey:key,transitionNo:nextNo});
     if(nextNo>=config.churn.lockAtTransitions){raiseIntegrityFlag(userId,'KEY_LOCKED',localDate(userId),{entitlementKey:key,transitionNo:nextNo});ledger.lockEntitlement(userId,key,'CHURN',nowIso());}

@@ -75,6 +75,18 @@ describe('Part 6 XP engine', () => {
     expect(() => db.prepare('UPDATE xp_ledger SET note=? WHERE id=1').run('changed')).toThrow(/append-only/);
   });
 
+  it('NOT-005: emits the complete LEVEL_UP celebration payload', async () => {
+    const now = new Date().toISOString();
+    const baseline = Number(db.prepare(`INSERT INTO xp_ledger(user_id,entry_type,rule_id,entitlement_key,transition_no,idempotency_key,
+      lifetime_delta,balance_delta,period_type,period_key,reason_code,config_version,actor,created_at)
+      VALUES(1,'ADJUSTMENT',NULL,NULL,NULL,'test-level-baseline',60,60,'admin','test','TEST_BASELINE','0.1.0','test',?)`).run(now).lastInsertRowid);
+    db.prepare('UPDATE user_progress SET lifetime_xp=60,spendable_xp=60,max_level_reached=1,last_ledger_id=? WHERE user_id=1').run(baseline);
+    await request(app).post('/api/transactions').set('Cookie', cookie)
+      .send({ type: 'expense', amount: '25.00', categoryId, transactionDate: today }).expect(201);
+    const notice = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=1 AND code='LEVEL_UP'").get();
+    expect(JSON.parse(notice.dataJson)).toMatchObject({ fromLevel: 1, toLevel: 2, titleBefore: 'Beginner', titleAfter: 'Budget Explorer', titleChanged: true, lifetimeXp: 105, progressBps: 250 });
+  });
+
   it('supports transaction Idempotency-Key and rejects reuse with a different body', async () => {
     const body = { type: 'expense', amount: '10.00', categoryId, transactionDate: today };
     const first = await request(app).post('/api/transactions').set('Cookie', cookie).set('Idempotency-Key', 'request-key-1').send(body).expect(201);
