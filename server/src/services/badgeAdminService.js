@@ -21,5 +21,24 @@ export function createBadgeAdminService({db,gameEngine}) {
       return {applied:true,badge:repository.badge(input.userId,input.slug,input.tier),xpReversal:xp?.lifetimeDelta??0};
     })();
   }
-  return {revoke};
+  function restore(input,{apply=false}={}) {
+    const badge=repository.badge(input.userId,input.slug,input.tier);
+    if(!badge)throw new Error('Badge tier not found for user.');
+    if(badge.status==='ACTIVE')return {applied:false,idempotent:true,badge};
+    if(!badge.caseId||!repository.caseForUser(badge.caseId,input.userId))throw new Error('The revoked badge has no valid review case.');
+    if(!apply)return {dryRun:true,badge,caseId:badge.caseId,actor:input.actor,note:input.note};
+    const at=gameEngine.clock.now().toISOString();
+    return db.transaction(()=>{
+      const key=`CASE${badge.caseId}:BADGE_RESTORE:${input.userId}:${input.slug}:${input.tier}`;
+      if(!repository.action({caseId:badge.caseId,actor:`admin:${input.actor}`,note:input.note,payload:{userId:input.userId,slug:input.slug,tier:input.tier,action:'BADGE_RESTORED'},key,at}))return {applied:false,idempotent:true};
+      if(!repository.restore({...input,at}))throw new Error('Badge changed before the restore could be applied.');
+      gameEngine.unlockBadge(input.userId,input.slug,input.tier);
+      const xp=gameEngine.reconcileBadge({userId:input.userId,slug:input.slug,tier:input.tier,desired:true,reasonCode:'BADGE_RESTORED',note:input.note});
+      repository.restoredNotice({userId:input.userId,slug:input.slug,tier:input.tier,at});
+      repository.restoredActivity({userId:input.userId,slug:input.slug,tier:input.tier,at});
+      gameEngine.emitRewardEvent('BADGE_UNLOCKED',input.userId,{slug:input.slug,tier:input.tier,restored:true},`BADGE:${input.userId}:${input.slug}:${input.tier}:RESTORED`);
+      return {applied:true,badge:repository.badge(input.userId,input.slug,input.tier),xpRestored:xp?.lifetimeDelta??0};
+    })();
+  }
+  return {revoke,restore};
 }

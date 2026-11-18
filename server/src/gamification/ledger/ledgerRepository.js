@@ -119,6 +119,7 @@ export function createLedgerRepository(db) {
     lockEntitlement(userId,key,reason,now,caseId=null) {
       return db.prepare(`INSERT OR IGNORE INTO entitlement_locks(user_id,entitlement_key,reason,created_at,case_id) VALUES(?,?,?,?,?)`).run(userId,key,reason,now,caseId).changes > 0;
     },
+    unlockAdminEntitlement(userId,key) { return db.prepare(`DELETE FROM entitlement_locks WHERE user_id=? AND entitlement_key=? AND reason='ADMIN'`).run(userId,key).changes>0; },
     recentFlagCount(userId,code,since) { return db.prepare(`SELECT count(*) AS count FROM gamification_flags WHERE user_id=? AND code=? AND created_at>=?`).get(userId,code,since).count; },
     updateLastSettled(userId, date, now) { db.prepare('UPDATE user_progress SET last_settled_date=?,updated_at=? WHERE user_id=?').run(date,now,userId); },
   };

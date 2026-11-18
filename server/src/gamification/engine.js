@@ -811,6 +811,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     badgeCatalog:(userId)=>badges.catalog(userId), evaluateBadges:(userId,slug=null,options={})=>badges.evaluate(userId,config.rewards.badges.filter((family)=>!slug||family.slug===slug),options),
     reconcileBadge:({userId,slug,tier,desired,reasonCode,note})=>reconcileKey({userId,key:`BAD-003:${slug}:${tier}`,ruleId:'BAD-003',periodType:'once',periodKey:`BAD-003:${slug}:${tier}`,desired,value:rewards.badge(userId,slug,tier)?.xpAwarded??0,reasonCode,note}),
     lockBadge:(userId,slug,tier,at,caseId)=>ledger.lockEntitlement(userId,`BAD-003:${slug}:${tier}`,'ADMIN',at,caseId),
+    unlockBadge:(userId,slug,tier)=>ledger.unlockAdminEntitlement(userId,`BAD-003:${slug}:${tier}`),
     missionCurrent:(userId)=>missions.current(userId), missionHistory:(userId,filters)=>missions.history(userId,filters), rerollMission:(userId,slot)=>missions.reroll(userId,slot),
     rewardConfig:()=>config.rewards, rewardUnits:()=>config.units, purchaseState:(userId)=>{const state=ensureProgress(userId);return {level:state?.maxLevelReached??0,spendableXp:state?.spendableXp??0,lifetimeXp:state?.lifetimeXp??0};},
     recordSpend, recordSpendRefund, recordChallengeReward, emitRewardEvent:(type,userId,data,key)=>publish(type,userId,data,key),

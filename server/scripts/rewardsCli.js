@@ -41,6 +41,12 @@ try {
       throw new Error('Usage: badges revoke --user <id> --slug <slug> --tier <n> --case <id> --actor <name> --note <text> [--apply]');
     if(!input.actor||!input.note||input.note.trim().length<10)throw new Error('Revocation requires --actor and a note of at least 10 characters.');
     print(admin.revoke(input,{apply}));
+  } else if(area==='badges'&&command==='unlock'){
+    const input={userId:Number(option('user')),slug,tier:Number(option('tier')),actor:option('actor'),note:option('note')};
+    if(!Number.isSafeInteger(input.userId)||input.userId<1||!Number.isSafeInteger(input.tier)||input.tier<1||!input.slug)
+      throw new Error('Usage: badges unlock --user <id> --slug <slug> --tier <n> --actor <name> --note <text> [--apply]');
+    if(!input.actor||!input.note||input.note.trim().length<10)throw new Error('Badge restore requires --actor and a note of at least 10 characters.');
+    print(admin.restore(input,{apply}));
   } else if(area==='shop'&&command==='refund'){
     const purchaseId=Number(args.find((value)=>/^\d+$/.test(value)));
     const actor=option('actor');const note=option('note');
@@ -54,5 +60,5 @@ try {
     const actor=option('actor');const note=option('note');
     if(apply&&(!actor||!note||note.trim().length<10))throw new Error('Applied activity backfills require --actor and a note of at least 10 characters.');
     print(activityAdmin.backfill({userId,actor,note},{apply}));
-  } else throw new Error('Usage: rewardsCli.js badges <backfill|revoke> ... | shop refund <purchaseId> ... | activity backfill [--user <id>] [--actor <name> --note <text>] [--apply] | economy report');
+  } else throw new Error('Usage: rewardsCli.js badges <backfill|revoke|unlock> ... | shop refund <purchaseId> ... | activity backfill [--user <id>] [--actor <name> --note <text>] [--apply] | economy report');
 } finally { db.close(); }

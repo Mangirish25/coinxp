@@ -23,6 +23,7 @@ const integrityMessages = Object.freeze({
   BADGE_UNLOCKED: 'You unlocked a badge. See your profile for your progress.',
   BADGE_BACKFILL_SUMMARY: 'Your badge progress has been updated from your existing activity.',
   BADGE_REVOKED: 'A badge was removed after an administrator review.',
+  BADGE_RESTORED: 'A badge was restored after an administrator review.',
   MISSION_ASSIGNED: 'A new mission is ready for you.',
   MISSION_COMPLETED: 'You completed a mission and earned XP.',
   MISSION_EXPIRED: 'A mission period has ended. A new mission will arrive in its next cycle.',

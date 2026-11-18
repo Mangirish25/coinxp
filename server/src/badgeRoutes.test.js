@@ -54,5 +54,13 @@ describe('Part 9 BAD-003 badge API', () => {
     expect(db.prepare(`SELECT count(*) AS n FROM entitlement_locks WHERE user_id=1 AND entitlement_key='BAD-003:first_step:1'`).get().n).toBe(1);
     app.locals.gameEngine.evaluateBadges(1,'first_step');
     expect(db.prepare(`SELECT status FROM user_badges WHERE user_id=1 AND badge_slug='first_step' AND tier=1`).get().status).toBe('REVOKED');
+    const restoration={userId:1,slug:'first_step',tier:1,actor:'reviewer',note:'Review completed and badge eligibility confirmed.'};
+    expect(service.restore(restoration).dryRun).toBe(true);
+    expect(service.restore(restoration,{apply:true})).toMatchObject({applied:true,xpRestored:10,badge:{status:'ACTIVE'}});
+    expect(service.restore(restoration,{apply:true}).idempotent).toBe(true);
+    expect(db.prepare(`SELECT count(*) AS n FROM xp_ledger WHERE user_id=1 AND entitlement_key='BAD-003:first_step:1' AND entry_type='AWARD'`).get().n).toBe(1);
+    expect(db.prepare(`SELECT count(*) AS n FROM entitlement_locks WHERE user_id=1 AND entitlement_key='BAD-003:first_step:1'`).get().n).toBe(0);
+    expect(db.prepare(`SELECT count(*) AS n FROM case_actions WHERE case_id=? AND action='NOTE'`).get(caseId).n).toBe(2);
+    expect(db.prepare(`SELECT count(*) AS n FROM user_notices WHERE user_id=1 AND code='BADGE_RESTORED'`).get().n).toBe(1);
   });
 });
