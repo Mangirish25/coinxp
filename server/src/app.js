@@ -19,6 +19,7 @@ import { createBadgeRoutes } from './routes/badgeRoutes.js';
 import { createMissionRoutes } from './routes/missionRoutes.js';
 import { createShopRoutes } from './routes/shopRoutes.js';
 import { createChallengeRoutes } from './routes/challengeRoutes.js';
+import { createProfileRoutes } from './routes/profileRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -51,6 +52,7 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/missions', createMissionRoutes({ db, env, gameEngine }));
   app.use('/api/shop', createShopRoutes({ db, env, gameEngine, streakService }));
   app.use('/api/challenges', createChallengeRoutes({ db, env, gameEngine }));
+  app.use('/api/profile', createProfileRoutes({ db, env, gameEngine, streakService }));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
