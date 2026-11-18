@@ -19,6 +19,8 @@ import { buildBudgetWarnings } from './integrity/warnings.js';
 import { createBudgetService } from '../services/budgetService.js';
 import { theoreticalMaximum, checkTheoreticalCeiling } from './integrity/ceiling.js';
 import { assertRewardCatalog } from './rewards/catalog.js';
+import { createRewardRepository } from '../repositories/rewardRepository.js';
+import { createBadgeService } from './rewards/badges.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -47,6 +49,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   const transactions=createTransactionRepository(db);
   const budgetHistory=createBudgetHistoryRepository(db);
   const integrity=createIntegrityRepository(db);
+  const rewards=createRewardRepository(db);
   const budgets=createBudgetService({db,gameEngine:{clock}});
 
   function nowIso(){return clock.now().toISOString();}
@@ -144,7 +147,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
 
     if ((entryType === 'AWARD' || entryType === 'REINSTATE') &&
         (['XP-003','XP-004','XP-005'].includes(ruleId) && integrity.hasActiveHoldForScope(userId,'OUTCOME_XP',nowIso()) ||
-         ruleId === 'STR-006' && integrity.hasActiveHoldForScope(userId,'STREAK_XP',nowIso()))) return null;
+         ruleId === 'STR-006' && integrity.hasActiveHoldForScope(userId,'STREAK_XP',nowIso()) ||
+         ['BAD-003','MIS-004','MIS-007'].includes(ruleId) && integrity.hasActiveHoldForScope(userId,'PROGRESSION_XP',nowIso()))) return null;
 
     const transitionReasonCode = entryType === 'REVERSAL' && ['XP-001','XP-006:FIRST_TRANSACTION'].includes(ruleId)
       ? 'RECORD_REMOVED'
@@ -497,6 +501,9 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     }
   }
 
+  const badges = createBadgeService({ db, repository: rewards, config, clock, localDate, reconcileKey, publish,
+    insertNotice: (notice) => integrity.insertNotice(notice) });
+
   function processUser(userId){
     if(!enabled)return null;
     const entries=[];let levelUps=[];
@@ -521,8 +528,11 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     }
     const progress=ledger.progress(userId);
     if(!progress)return null;
-    const level=progress.maxLevelReached;
-    return {xpDelta:entries.reduce((sum,item)=>sum+item.delta,config.units.zero),lifetimeXp:progress.lifetimeXp,spendableXp:progress.spendableXp,level,
+    try { badges.evaluate(userId); }
+    catch(error){ try{logger.error?.(`Badge evaluation failed for user ${userId}.`,error);}catch{/* logger failures are ignored */} }
+    const refreshedProgress=ledger.progress(userId)??progress;
+    const level=refreshedProgress.maxLevelReached;
+    return {xpDelta:entries.reduce((sum,item)=>sum+item.delta,config.units.zero),lifetimeXp:refreshedProgress.lifetimeXp,spendableXp:refreshedProgress.spendableXp,level,
       title:titleForLevel(level,config),levelUp:levelUps.at(-1)??null,entries};
   }
 
@@ -638,7 +648,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const today = localDate(userId,clock.now());
     const from = shiftDate(today,-config.settlement.sealAfterDays);
     const reconciled = reconcileRange(userId,from,today);
-    return { expired: expired.length, reconciled: reconciled.length };
+    const releasedBadges = badges.releaseDeferred(userId);
+    return { expired: expired.length, reconciled: reconciled.length + releasedBadges.length };
   }
 
   function runIntegrityAudit(userId, { persist = false } = {}) {
@@ -742,7 +753,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
-    dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory}};
+    advanceRewards:(userId)=>badges.evaluate(userId), badgeCatalog:(userId)=>badges.catalog(userId),
+    dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory,rewards}};
 }
 
 function cryptoRandom(){return randomUUID();}

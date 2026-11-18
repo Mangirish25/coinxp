@@ -79,6 +79,9 @@ const rulesConfig = Object.freeze({
   }),
   rewards: Object.freeze({
     catalogVersion: '1.0.0',
+    maxBadgeEvaluationPasses: 5,
+    badgeCategoryOrder: Object.freeze(['TRACKING', 'STREAK', 'BUDGET', 'PROGRESS', 'CHALLENGE', 'HABIT']),
+    metrics: Object.freeze({ freshStart: Object.freeze({ gapDays: 30, minPriorTrackedDays: 14, consecutiveDays: 3 }) }),
     rarityXp: Object.freeze({ COMMON: 10, UNCOMMON: 25, RARE: 50, EPIC: 100, LEGENDARY: 200 }),
     progressiveRarities: Object.freeze(['COMMON', 'UNCOMMON', 'RARE', 'EPIC']),
     badges: Object.freeze([
@@ -143,7 +146,7 @@ const rulesConfig = Object.freeze({
     backfill: Object.freeze({ awardXp: true, silent: true }),
     economy: Object.freeze({ daysPerYear: 365, weeksPerYear: 52, monthsPerYear: 12, baseMinShareBps: 6000,
       newRecurringMaxShareBps: 2500, oneTimeMaxShareBps: 1500 }),
-    notifications: Object.freeze({ mutable: Object.freeze(['PROGRESS', 'REWARD', 'STREAK', 'WARNING', 'INFO']), locked: Object.freeze(['RESTRICTION', 'REVIEW', 'XP_CHANGE']), maxPerResponse: 3 }),
+    notifications: Object.freeze({ mutable: Object.freeze(['PROGRESS', 'REWARD', 'STREAK', 'WARNING', 'INFO']), locked: Object.freeze(['RESTRICTION', 'REVIEW', 'XP_CHANGE']), maxPerResponse: 3, maxBadgeNamesPerNotice: 3 }),
     activity: Object.freeze({ pageSize: 30, maxPageSize: 100 }),
   }),
   events: Object.freeze({ retentionDays: 400, schemaVersion: 1, cleanupIntervalHours: 24, reconciliationDays: 45, workerBatchSize: 100 }),

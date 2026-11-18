@@ -91,7 +91,7 @@ describe('Part 8 integrity transparency API', () => {
     const input={caseId,action:'CLAWBACK',entryIds:[award.id],actor:'reviewer',note:'Reviewed evidence; tracking award was not earned.'};
     expect(admin.applyCaseAction(input)).toMatchObject({applied:true,removedXp:10});
     expect(admin.applyCaseAction(input)).toMatchObject({applied:false,action:'CLAWBACK'});
-    expect(db.prepare('SELECT lifetime_xp AS lifetimeXp FROM user_progress WHERE user_id=1').get().lifetimeXp).toBe(25);
+    expect(db.prepare('SELECT lifetime_xp AS lifetimeXp FROM user_progress WHERE user_id=1').get().lifetimeXp).toBe(35); // Badge XP latches under DD-31.
     expect(db.prepare("SELECT reason,case_id AS caseId FROM entitlement_locks WHERE entitlement_key LIKE 'XP-001:%'").get()).toMatchObject({reason:'CLAWBACK',caseId});
     expect(db.prepare("SELECT reason_code AS reasonCode FROM xp_ledger WHERE reason_code='INTEGRITY_CLAWBACK'").get().reasonCode).toBe('INTEGRITY_CLAWBACK');
     expect(db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=1 AND code='CLAWBACK_APPLIED'").get().count).toBe(1);

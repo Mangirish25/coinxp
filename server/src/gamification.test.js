@@ -64,13 +64,13 @@ describe('Part 6 XP engine', () => {
       .send({ type: 'expense', amount: '25.00', categoryId, transactionDate: today }).expect(201);
     expect(created.body.gamification.xpDelta).toBe(35);
     const summary = await request(app).get('/api/gamification/summary').set('Cookie', cookie).expect(200);
-    expect(summary.body.lifetimeXp).toBe(35);
+    expect(summary.body.lifetimeXp).toBe(45); // BAD-003 first_step is latched with 10 XP.
     await request(app).post('/api/gamification/daily-review').set('Cookie', cookie).send({ noSpend: false }).expect(201);
     const afterReview = await request(app).get('/api/gamification/summary').set('Cookie', cookie).expect(200);
-    expect(afterReview.body.lifetimeXp).toBe(75);
+    expect(afterReview.body.lifetimeXp).toBe(85);
     await request(app).delete(`/api/transactions/${created.body.id}`).set('Cookie', cookie).send({}).expect(204);
     const afterDelete = await request(app).get('/api/gamification/summary').set('Cookie', cookie).expect(200);
-    expect(afterDelete.body.lifetimeXp).toBe(25);
+    expect(afterDelete.body.lifetimeXp).toBe(35); // DD-31 keeps the earned badge after correction.
     expect(db.prepare("SELECT count(*) AS count FROM xp_ledger WHERE user_id=1 AND entry_type='REVERSAL'").get().count).toBe(3);
     expect(() => db.prepare('UPDATE xp_ledger SET note=? WHERE id=1').run('changed')).toThrow(/append-only/);
   });
@@ -136,7 +136,7 @@ describe('Part 6 XP engine', () => {
     expect(outcome.through).toBe('2026-11-08');
     expect(db.prepare("SELECT outcome FROM settlements WHERE user_id=? AND period_type='day' AND period_key='2026-11-08'").get(registered.body.id).outcome).toBe('PASS');
     const summary = await request(app).get('/api/gamification/summary').set('Cookie', cookie).expect(200);
-    expect(summary.body.lifetimeXp).toBe(80);
+    expect(summary.body.lifetimeXp).toBe(90); // BAD-003 first_step is independent of outcome XP.
   });
 
   it('XP-011: reverses a crossed settled limit once and reinstates after a valid correction', async () => {
