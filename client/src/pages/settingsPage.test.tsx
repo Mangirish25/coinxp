@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider } from '../contexts/AuthContext';
 import { MotionProvider } from '../motion/MotionProvider';
 import { SettingsPage } from './SettingsPage';
@@ -11,7 +12,7 @@ describe('MOT-002 display settings', () => {
   it('offers reduced motion and a visible pause control while persisting the local fallback', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: { code: 'UNAUTHENTICATED', message: 'Sign in.' } }) }) as Response));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><AuthProvider><MotionProvider><SettingsPage /></MotionProvider></AuthProvider></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><AuthProvider><MotionProvider><SettingsPage /></MotionProvider></AuthProvider></MemoryRouter></QueryClientProvider>);
     const selector = await screen.findByLabelText('Motion preference');
     fireEvent.change(selector, { target: { value: 'REDUCED' } });
     await waitFor(() => expect(localStorage.getItem('coinxp:ui-preferences:v1')).toContain('REDUCED'));
@@ -25,7 +26,7 @@ describe('MOT-002 display settings', () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: { code: 'UNAUTHENTICATED', message: 'Sign in.' } }) }) as Response);
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><AuthProvider><MotionProvider><SettingsPage /></MotionProvider></AuthProvider></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><MemoryRouter><AuthProvider><MotionProvider><SettingsPage /></MotionProvider></AuthProvider></MemoryRouter></QueryClientProvider>);
     fireEvent.change(await screen.findByLabelText('Current password'), { target: { value: 'current-pass-88' } });
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'weakpassword' } });
     fireEvent.click(screen.getByRole('button', { name: 'Change password' }));

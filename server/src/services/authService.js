@@ -2,6 +2,7 @@ import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
 import { AUTH_CONFIG, DUMMY_PASSWORD_HASH } from '../config/authConstants.js';
 import { createUserRepository } from '../repositories/userRepository.js';
+import { createAccountRepository } from '../repositories/accountRepository.js';
 import { nowIso } from '../utils/dates.js';
 import { httpError } from '../utils/httpError.js';
 import rules from '../gamification/rules.config.js';
@@ -42,6 +43,7 @@ function isUniqueEmailError(error) {
 
 export function createAuthService({ db, secret, gameEngine }) {
   const users = createUserRepository(db);
+  const accounts = createAccountRepository(db);
   const timezoneChanges = createTimezoneChangeRepository(db);
 
   return {
@@ -84,7 +86,8 @@ export function createAuthService({ db, secret, gameEngine }) {
         throw httpError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
       }
 
-      return { user: publicUser(user), token: createToken(user, secret) };
+      const deletion = accounts.deletionStatus(user.id);
+      return { user: publicUser(user), token: createToken(user, secret), pendingDeletion: deletion?.status === 'PENDING' ? deletion : null };
     },
 
     async changePassword(userId, { currentPassword, newPassword }) {
@@ -111,6 +114,7 @@ export function createAuthService({ db, secret, gameEngine }) {
       const user = users.findById(id);
       return user ? { user: publicUser(user), tokenVersion: user.token_version ?? 0 } : null;
     },
+    deletionStatus(id) { return accounts.deletionStatus(id); },
 
     updateTimezone(id, timezone) {
       const current = users.timezoneSettings(id);

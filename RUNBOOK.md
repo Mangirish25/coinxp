@@ -16,4 +16,4 @@ For local development, use `npm run db:migrate` and the documented development r
 
 ## Known operational gaps
 
-There is no scheduled backup upload/retention/restore-check, alerting integration, admin health-detail token rotation workflow, or deletion worker yet. The public readiness endpoint does not verify an external backup age. Treat on-call response, restore time, and RPO/RTO as unproven until a rehearsal is recorded.
+There is no scheduled backup upload/retention/restore-check or alerting integration. Account deletion grace periods are purged by the gamification scheduler process even when gamification is disabled; ensure one scheduler-enabled server instance is running. The public readiness endpoint does not verify an external backup age. Treat on-call response, restore time, and RPO/RTO as unproven until a rehearsal is recorded.

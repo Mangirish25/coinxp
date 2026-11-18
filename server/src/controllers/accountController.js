@@ -1,7 +1,10 @@
 import { Readable } from 'node:stream';
 import { createAccountService } from '../services/accountService.js';
+import { authCookieName } from '../config/authConstants.js';
 
-export function createAccountController({ db, clock }) {
+function asyncHandler(handler) { return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next); }
+
+export function createAccountController({ db, clock, env }) {
   const service = createAccountService({ db, clock });
   return {
     export(req, res, next) {
@@ -33,5 +36,11 @@ export function createAccountController({ db, clock }) {
         Readable.from(output()).on('error', next).pipe(res);
       } catch (error) { next(error); }
     },
+    scheduleDeletion: asyncHandler(async (req, res) => {
+      const deletion = await service.scheduleDeletion(req.user.id, req.body.password);
+      res.clearCookie(authCookieName(env), { httpOnly: true, sameSite: 'lax', secure: env.nodeEnv === 'production', path: '/' });
+      res.status(202).json({ scheduledFor: deletion.scheduledFor });
+    }),
+    restore: asyncHandler(async (req, res) => res.json(service.restoreDeletion(req.user.id))),
   };
 }

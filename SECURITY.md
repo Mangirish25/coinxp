@@ -17,4 +17,4 @@ Set `NODE_ENV=production`, `JWT_SECRET` (32+ characters), `PUBLIC_ORIGIN` (exact
 
 ## Known release gaps
 
-Part 10 remains in progress. Scheduled account deletion and restoration, automated off-host backup/restore, deployment rehearsal, and the broader authorization/security automation are not complete yet. Do not treat this repository as release-ready or expose it to untrusted production traffic until those items have been designed, implemented, tested, and reviewed. No responsible disclosure email address has been configured in this repository yet.
+Part 10 remains in progress. Automated off-host backup/restore, deployment rehearsal, and the broader authorization/security automation are not complete yet. Do not treat this repository as release-ready or expose it to untrusted production traffic until those items have been designed, implemented, tested, and reviewed. No responsible disclosure email address has been configured in this repository yet.

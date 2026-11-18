@@ -1,9 +1,11 @@
 import rules from './rules.config.js';
 import { createOutboxRepository } from './outbox/outboxRepository.js';
 import { shiftDate } from './dateMath.js';
+import { createAccountService } from '../services/accountService.js';
 
 export function startGamificationScheduler(engine, { db, streakAdvancer, clock = engine.clock, logger = console, intervalMs } = {}) {
   const outbox = createOutboxRepository(db);
+  const accountService = createAccountService({ db, clock });
   const interval = intervalMs ?? rules.settlement.schedulerIntervalMinutes * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
   let running = false;
   let stopped = false;
@@ -11,9 +13,11 @@ export function startGamificationScheduler(engine, { db, streakAdvancer, clock =
   let lastReconciliation = 0;
   let lastAudit = 0;
   async function tick() {
-    if (running || stopped || !engine.enabled) return;
+    if (running || stopped) return;
     running = true;
     try {
+      accountService.purgeDue();
+      if (!engine.enabled) return;
       for (const userId of outbox.pendingUsers(clock.now().toISOString(), rules.events.workerBatchSize)) engine.processUser(userId);
       const users = engine.dependencies.settlements.users();
       for (const user of users) {

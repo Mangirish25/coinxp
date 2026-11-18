@@ -29,6 +29,10 @@ export function createAuthController({ db, env, gameEngine }) {
     login: asyncHandler(async (req, res) => {
       const result = await auth.login(req.body);
       setCookie(res, result.token);
+      if (result.pendingDeletion) {
+        res.status(423).json({ error: { code: 'ACCOUNT_PENDING_DELETION', message: `This account is scheduled for deletion on ${result.pendingDeletion.scheduledFor}. Restore it to keep using CoinXP.` } });
+        return;
+      }
       res.status(200).json(result.user);
     }),
     changePassword: asyncHandler(async (req, res) => {

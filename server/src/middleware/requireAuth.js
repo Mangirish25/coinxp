@@ -3,7 +3,7 @@ import { authCookieName } from '../config/authConstants.js';
 import { createAuthService } from '../services/authService.js';
 import { httpError } from '../utils/httpError.js';
 
-export function requireAuth({ db, secret, env }) {
+export function requireAuth({ db, secret, env, allowPendingDeletion = false }) {
   const auth = createAuthService({ db, secret });
   return (req, _res, next) => {
     const token = req.cookies?.[authCookieName(env)];
@@ -35,6 +35,10 @@ export function requireAuth({ db, secret, env }) {
     const session = auth.findSessionUserById(userId);
     if (!session || session.tokenVersion !== (payload.ver ?? 0)) {
       return next(httpError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'));
+    }
+    const deletion = auth.deletionStatus(userId);
+    if (!allowPendingDeletion && deletion?.status === 'PENDING') {
+      return next(httpError(423, 'ACCOUNT_PENDING_DELETION', `This account is scheduled for deletion on ${deletion.scheduledFor}. Sign in to restore it.`));
     }
     req.user = session.user;
     next();

@@ -6,7 +6,7 @@ This checklist is intentionally not signed. Part 10 is incomplete.
 - [x] Readiness endpoint checks database and migrations
 - [x] In-memory server and client unit/component suites pass
 - [x] Streaming owner-scoped account export and rate limit
-- [ ] Account deletion, 30-day grace, restore, complete hard-erasure verification
+- [x] Account deletion, 30-day grace, restore, hard-erasure integration check
 - [x] Password change invalidates existing sessions with a per-user token version
 - [ ] Full celebration payload contract, instant path, cross-device exactly-once behavior
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
