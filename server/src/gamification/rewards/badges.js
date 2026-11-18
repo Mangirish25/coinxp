@@ -52,7 +52,8 @@ export function createBadgeService({ db, repository, config, clock, localDate, r
             const key = family.type === 'REPEATABLE' ? `BAD-003:${family.slug}:1` : `BAD-003:${family.slug}:${tier}`;
             if (awardXp) reconcileKey({ userId, key, ruleId: 'BAD-003', periodType: 'once', periodKey: key, desired: true,
               value: xp, reasonCode: 'BADGE_UNLOCKED' });
-            const result = { slug: family.slug, tier, rarity, xpAwarded: xp, achievedOn, name: family.slug.replaceAll('_', ' ') };
+            const result = { slug: family.slug, tier, rarity, category: family.category, hidden: Boolean(family.hidden),
+              xp, xpAwarded: xp, achievedOn, name: family.slug.replaceAll('_', ' ') };
             passUnlocked.push(result);
             changed = true;
             publish('BADGE_UNLOCKED', userId, result, `BADGE:${userId}:${family.slug}:${tier}`);
@@ -63,8 +64,14 @@ export function createBadgeService({ db, repository, config, clock, localDate, r
         }
         if (passUnlocked.length) {
           const names = passUnlocked.slice(0, config.rewards.notifications.maxBadgeNamesPerNotice).map(({ name, tier }) => `${name} (tier ${tier})`);
+          const [primary, ...coalesced] = passUnlocked;
+          const data = summaryNotice
+            ? { badges: names, moreCount: Math.max(0, passUnlocked.length - names.length) }
+            : { slug: primary.slug, tier: primary.tier, rarity: primary.rarity, category: primary.category,
+              xp: primary.xp, hidden: primary.hidden, achievedOn: primary.achievedOn,
+              coalesced: coalesced.map(({ slug, tier, rarity }) => ({ slug, tier, rarity })) };
           insertNotice({ userId, kind: 'REWARD', code: summaryNotice ? 'BADGE_BACKFILL_SUMMARY' : 'BADGE_UNLOCKED',
-            data: { badges: names, moreCount: Math.max(0, passUnlocked.length - names.length) },
+            data,
             dedupeKey: `BADGES:${userId}:${passUnlocked.map(({ slug, tier }) => `${slug}:${tier}`).join('|')}`, createdAt: now });
         }
       })();

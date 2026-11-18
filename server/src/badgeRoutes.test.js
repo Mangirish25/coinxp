@@ -37,6 +37,8 @@ describe('Part 9 BAD-003 badge API', () => {
     await request(app).post('/api/transactions').set('Cookie', cookie).set('Idempotency-Key', 'badge-repeat')
       .send({ type: 'expense', amount: '15', categoryId, transactionDate: date }).expect(201);
     expect(db.prepare("SELECT count(*) AS count FROM xp_ledger WHERE user_id=1 AND entitlement_key='BAD-003:first_step:1' AND entry_type='AWARD'").get().count).toBe(1);
+    const badgeNotice = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=1 AND code='BADGE_UNLOCKED'").get();
+    expect(JSON.parse(badgeNotice.dataJson)).toMatchObject({ slug: 'first_step', tier: 1, rarity: 'COMMON', category: 'TRACKING', xp: 10, hidden: false, achievedOn: date, coalesced: [] });
     await request(app).delete(`/api/transactions/${transaction.body.id}`).set('Cookie', cookie).send({}).expect(204);
     const badges = await request(app).get('/api/badges').set('Cookie', cookie).expect(200);
     expect(badges.body.data.find(({ slug }) => slug === 'first_step').tiers[0].status).toBe('ACTIVE');
