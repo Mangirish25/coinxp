@@ -17,8 +17,8 @@ export function IntegrityNoticeCenter() {
       const [nextStatus, nextNotices] = await Promise.all([integrityApi.status(), integrityApi.notices()]);
       setStatus(nextStatus);
       setNotices(nextNotices.data);
-      setPreferences((await activityApi.preferences()).preferences);
     } catch { setStatus(null); }
+    try { setPreferences((await activityApi.preferences()).preferences); } catch { /* Preferences may fail without hiding account notices. */ }
   }, []);
   useEffect(() => {
     if (open) void refresh();
@@ -39,8 +39,8 @@ export function IntegrityNoticeCenter() {
   async function togglePreference(preference: NotificationPreference) {
     if (!preference.mutable) return;
     const next = { category: preference.category, enabled: !preference.enabled };
-    const saved = await activityApi.savePreferences([next]);
-    setPreferences(saved.preferences);
+    try { const saved = await activityApi.savePreferences([next]); setPreferences(saved.preferences); }
+    catch (error) { setFeedback(error instanceof Error ? error.message : 'Could not update preferences.'); }
   }
   return (
     <div className="relative mt-4">
@@ -57,7 +57,7 @@ export function IntegrityNoticeCenter() {
         {status?.canAppeal && <form className="mt-3 space-y-2" onSubmit={(event) => void appeal(event)}><label className="block text-sm font-medium">Appeal<textarea className="mt-1 w-full rounded-xl border border-black/10 p-2" maxLength={500} required value={message} onChange={(event) => setMessage(event.target.value)} /></label><button className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white">Submit appeal</button></form>}
         {feedback && <p role="status" className="mt-2 text-sm text-ink-600">{feedback}</p>}
         {status?.unreadNotices ? <button className="mt-3 text-sm font-medium text-brand-700 underline" onClick={() => void acknowledge()}>Mark updates read</button> : null}
-        <details className="mt-4 border-t border-black/5 pt-3"><summary className="cursor-pointer text-sm font-medium">Notification preferences</summary><div className="mt-2 space-y-2">{preferences.map((preference)=><label key={preference.category} className="flex items-center justify-between gap-2 text-xs"><span>{preference.category.replaceAll('_',' ')}{!preference.mutable&&<span className="ml-1 text-ink-400">(always on)</span>}</span><input type="checkbox" checked={preference.enabled} disabled={!preference.mutable} onChange={()=>void togglePreference(preference)} aria-label={`${preference.category} notifications`} /></label>)}</div></details>
+        <details className="mt-4 border-t border-black/5 pt-3"><summary className="cursor-pointer text-sm font-medium">Notification preferences</summary><p className="mt-1 text-xs text-ink-500">Locked safety and XP updates stay enabled; muted items remain readable above.</p><div className="mt-2 space-y-2">{preferences.map((preference)=><label key={preference.category} className="flex items-center justify-between gap-2 text-xs"><span>{preference.category.replaceAll('_',' ')}{!preference.mutable&&<span className="ml-1 text-ink-400">(always on)</span>}</span><input type="checkbox" checked={preference.enabled} disabled={!preference.mutable} onChange={()=>void togglePreference(preference)} aria-label={`${preference.category} notifications`} /></label>)}</div></details>
       </section>}
     </div>
   );

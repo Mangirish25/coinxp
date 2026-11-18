@@ -143,8 +143,8 @@ describe('DashboardPage states', () => {
     setup(true);
     await waitFor(() => expect(screen.getByText('Total balance')).toBeTruthy());
     await waitFor(() => {
-      const categorySection = screen.getByText('Spending by category').closest('section');
-      expect(categorySection?.querySelector('[role="alert"]')).toBeTruthy();
+      const categorySections = screen.getAllByText('Spending by category').map((heading) => heading.closest('section'));
+      expect(categorySections.some((section) => section?.querySelector('[role="alert"]'))).toBe(true);
     }, { timeout: 3000 });
     expect(screen.getByText('Recent transactions')).toBeTruthy();
   });

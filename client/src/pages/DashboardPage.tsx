@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Plus, Tag } from 'lucide-react';
 import {
   Bar,
@@ -23,6 +23,7 @@ import { formatINR } from '../utils/money';
 import { MonthSelector } from '../components/MonthSelector';
 import { currentMonthInTimezone } from './budgetPageUtils';
 import { GamificationSummarySlot } from '../components/GamificationSummarySlot';
+import { missionApi } from '../services/missionApi';
 
 const card = 'rounded-2xl border border-black/5 bg-white p-5 shadow-sm';
 const palette = ['#0f766e', '#2563eb', '#9333ea', '#ea580c', '#be123c', '#475569'];
@@ -104,6 +105,8 @@ export function DashboardPage() {
     queryKey: ['analytics', 'monthly', 6],
     queryFn: () => analyticsApi.monthly(6),
   });
+  const missions = useQuery({ queryKey: ['missions','current'], queryFn: missionApi.current });
+  const reroll = useMutation({ mutationFn: missionApi.reroll });
   const categoryChart = useMemo(() => breakdown.data?.items ?? [], [breakdown.data]);
   const dailyChart = daily.data?.days ?? [];
   const empty =
@@ -143,6 +146,11 @@ export function DashboardPage() {
           </button>
         </div>
       )}
+      <section className={card} aria-label="Current missions">
+        <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">Missions</h2><p className="mt-1 text-sm text-ink-500">Small goals are verified when their period closes.</p></div><Link className="text-sm text-brand-700 underline" to="/missions">View missions</Link></div>
+        {missions.isLoading?<div className="mt-4 grid gap-3 md:grid-cols-3">{[1,2,3].map((n)=><Skeleton key={n} className="h-24"/>)}</div>:missions.isError?<SectionError retry={()=>void missions.refetch()}/>:missions.data?.data?.length?<div className="mt-4 grid gap-3 md:grid-cols-3">{missions.data.data.map((mission)=>{const canReroll=mission.status==='ASSIGNED'&&mission.generationSeq===0&&mission.slot!=='MONTHLY';const title=mission.templateId.split('_').slice(1).map((word)=>word[0]?.toUpperCase()+word.slice(1)).join(' ');return <article key={mission.id} className="rounded-xl border border-black/5 p-4"><p className="text-xs font-medium uppercase tracking-wide text-ink-500">{mission.slot.toLowerCase()} · {mission.periodKey}</p><h3 className="mt-1 font-medium">{title}</h3><p className="mt-1 text-xs text-ink-500">{mission.status==='ASSIGNED'?'Ends at local period close':mission.status}</p>{canReroll?<button type="button" disabled={reroll.isPending} onClick={()=>reroll.mutate(mission.slot)} className="mt-3 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50">Reroll</button>:<p className="mt-3 text-xs text-ink-400">Reroll unavailable for this mission.</p>}</article>;})}</div>:<p className="mt-4 rounded-xl bg-canvas p-4 text-sm text-ink-500">Missions will appear after your account builds enough history.</p>}
+        {reroll.isError&&<p role="alert" className="mt-3 text-sm text-red-700">{reroll.error instanceof Error?reroll.error.message:'Mission could not be rerolled.'}</p>}
+      </section>
       {!empty &&
         (summary.isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

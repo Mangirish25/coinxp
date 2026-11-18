@@ -6,6 +6,7 @@ function invalidateRewards() {
   for (const key of ['challenges', 'shop', 'gamification', 'badges', 'missions', 'profile', 'activity']) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('coinxp:integrity-refresh'));
 }
 
 export const challengeApi = {

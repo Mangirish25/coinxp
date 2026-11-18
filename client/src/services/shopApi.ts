@@ -12,6 +12,8 @@ export const shopApi = {
       void queryClient.invalidateQueries({ queryKey: ['streaks'] });
       void queryClient.invalidateQueries({ queryKey: ['profile'] });
       void queryClient.invalidateQueries({ queryKey: ['activity'] });
+      void queryClient.invalidateQueries({ queryKey: ['challenges'] });
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('coinxp:integrity-refresh'));
       return result;
     });
   },
