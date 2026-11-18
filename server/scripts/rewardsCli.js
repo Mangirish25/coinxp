@@ -2,6 +2,7 @@ import { loadEnv } from '../src/config/env.js';
 import { createDatabase } from '../src/db/connection.js';
 import { migrateDatabase } from '../src/db/migrator.js';
 import { createGamificationEngine } from '../src/gamification/engine.js';
+import { createBadgeAdminService } from '../src/services/badgeAdminService.js';
 
 const [area,command,...args]=process.argv.slice(2);
 const option=(name)=>{const index=args.indexOf(`--${name}`);return index<0?null:args[index+1]??null;};
@@ -11,6 +12,7 @@ const env=loadEnv();const db=createDatabase(env.dbPath);const print=(value)=>con
 try {
   migrateDatabase(db);
   const engine=createGamificationEngine({db,enabled:env.gamificationEnabled});
+  const admin=createBadgeAdminService({db,gameEngine:engine});
   if(area==='badges'&&command==='backfill'){
     if(userOption&&(!Number.isSafeInteger(userId)||userId<1))throw new Error('--user must be a positive integer.');
     if(slug&&!engine.rewardConfig().badges.some((family)=>family.slug===slug))throw new Error(`Unknown badge slug: ${slug}`);
@@ -27,5 +29,11 @@ try {
       for(const user of users)results.push({userId:user.id,unlocked:engine.evaluateBadges(user.id,slug,{awardXp:engine.rewardConfig().backfill.awardXp,summaryNotice:engine.rewardConfig().backfill.silent})});
       print({applied:true,results});
     }
-  } else throw new Error('Usage: rewardsCli.js badges backfill [--slug <slug>] [--user <id>] [--apply]');
+  } else if(area==='badges'&&command==='revoke'){
+    const input={userId:Number(option('user')),slug,tier:Number(option('tier')),caseId:Number(option('case')),actor:option('actor'),note:option('note')};
+    if(!Number.isSafeInteger(input.userId)||input.userId<1||!Number.isSafeInteger(input.tier)||input.tier<1||!Number.isSafeInteger(input.caseId)||input.caseId<1||!input.slug)
+      throw new Error('Usage: badges revoke --user <id> --slug <slug> --tier <n> --case <id> --actor <name> --note <text> [--apply]');
+    if(!input.actor||!input.note||input.note.trim().length<10)throw new Error('Revocation requires --actor and a note of at least 10 characters.');
+    print(admin.revoke(input,{apply}));
+  } else throw new Error('Usage: rewardsCli.js badges <backfill|revoke> ... [--apply]');
 } finally { db.close(); }
