@@ -12,6 +12,7 @@ import { TransactionsPage } from './pages/TransactionsPage';
 import { BudgetsPage } from './pages/BudgetsPage';
 import { XpPage } from './pages/XpPage';
 import { StreaksPage } from './pages/StreaksPage';
+import { BadgesPage } from './pages/BadgesPage';
 
 export function App() {
   return (
@@ -31,6 +32,7 @@ export function App() {
               <Route path="budgets" element={<BudgetsPage />} />
               <Route path="xp" element={<XpPage />} />
               <Route path="streaks" element={<StreaksPage />} />
+              <Route path="badges" element={<BadgesPage />} />
             </Route>
           </Route>
         </Routes>
