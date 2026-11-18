@@ -40,6 +40,7 @@ Authentication uses Argon2id password hashes and a signed JWT in an httpOnly coo
 | `POST` | `/api/auth/login`    | Verify credentials and sign in                          |
 | `POST` | `/api/auth/logout`   | Clear the authentication cookie                         |
 | `GET`  | `/api/auth/me`       | Return the current public user; requires authentication |
+| `POST` | `/api/auth/change-password` | Verify current password, update it, and rotate session version |
 
 The cookie is `httpOnly`, `SameSite=Lax`, scoped to `/`, and expires after seven days. It is `Secure` in production. CORS allows credentials only from `CLIENT_ORIGIN`. Login and registration are rate-limited. State-changing auth routes require `Content-Type: application/json`; JSON requests plus `SameSite=Lax` are the current CSRF mitigation. Stricter CSRF tokens are planned for Phase 2.
 
@@ -253,4 +254,4 @@ The display-preferences foundation is now persisted at `GET/PUT /api/ui/preferen
 
 The production HTTP baseline now uses a `__Host-coinxp` secure cookie, a restrictive CSP and related headers, disables CORS in production, and checks the exact `PUBLIC_ORIGIN` or Referer on writes. `GET /api/ready` checks the database and migration state (and scheduler heartbeat when configured); `GET /api/health/details` requires `Authorization: Bearer <OPS_HEALTH_TOKEN>` and returns operational counts without user data. `POST /api/test/clock` is mounted only when `NODE_ENV=test`, `ENABLE_TEST_CLOCK=1`, and an adjustable test clock is injected. Production requires explicit `PUBLIC_ORIGIN` and `TRUST_PROXY`; see [SECURITY.md](SECURITY.md).
 
-`GET /api/account/export` now streams a JSON attachment with the signed-in account's profile and user-scoped records across finance, XP, streak, reward, activity, preference and notice tables. The profile projection excludes password hashes; cross-user rows and global migration metadata are excluded. A persisted database limit allows one export per account per hour. This implements export only; deletion/restore and password change/session invalidation remain open Part 10 requirements.
+`GET /api/account/export` streams a JSON attachment with the signed-in account's profile and user-scoped records across finance, XP, streak, reward, activity, preference and notice tables. The profile projection excludes password hashes; cross-user rows and global migration metadata are excluded. A persisted database limit allows one export per account per hour. `POST /api/auth/change-password` verifies the current password and rotates `users.token_version`; older tokens are rejected by the standard auth middleware. Migration `012_auth_token_version.sql` adds the version field. Account deletion/restore is still open.

@@ -5,7 +5,7 @@ import { createAuthRateLimiters } from '../middleware/rateLimiters.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireJson } from '../middleware/requireJson.js';
 import { validateBody } from '../middleware/validateBody.js';
-import { loginSchema, logoutSchema, registerSchema } from '../validators/authSchemas.js';
+import { changePasswordSchema, loginSchema, logoutSchema, registerSchema } from '../validators/authSchemas.js';
 import { z } from 'zod';
 
 export function createAuthRoutes({ db, env, rateLimits = AUTH_CONFIG, gameEngine }) {
@@ -25,5 +25,6 @@ export function createAuthRoutes({ db, env, rateLimits = AUTH_CONFIG, gameEngine
   router.post('/logout', requireJson, validateBody(logoutSchema), controller.logout);
   router.get('/me', authenticated, controller.me);
   router.patch('/timezone', authenticated, requireJson, validateBody(z.object({ timezone: z.string().min(1).max(100) })), controller.timezone);
+  router.post('/change-password', limiters.changePassword, authenticated, requireJson, validateBody(changePasswordSchema), controller.changePassword);
   return router;
 }

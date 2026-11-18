@@ -7,7 +7,7 @@ This checklist is intentionally not signed. Part 10 is incomplete.
 - [x] In-memory server and client unit/component suites pass
 - [x] Streaming owner-scoped account export and rate limit
 - [ ] Account deletion, 30-day grace, restore, complete hard-erasure verification
-- [ ] Password change invalidates existing sessions with a per-user token version
+- [x] Password change invalidates existing sessions with a per-user token version
 - [ ] Full celebration payload contract, instant path, cross-device exactly-once behavior
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
 - [ ] UI state coverage for offline/partial failure at all screen sizes

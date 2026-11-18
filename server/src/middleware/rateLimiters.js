@@ -1,4 +1,5 @@
 import { rateLimit } from 'express-rate-limit';
+import { AUTH_CONFIG } from '../config/authConstants.js';
 
 function createLimiter({ windowMs, max }) {
   return rateLimit({
@@ -15,8 +16,10 @@ function createLimiter({ windowMs, max }) {
 }
 
 export function createAuthRateLimiters(config) {
+  const limits = { ...AUTH_CONFIG, ...config };
   return {
-    login: createLimiter(config.loginRateLimit),
-    register: createLimiter(config.registerRateLimit),
+    login: createLimiter(limits.loginRateLimit),
+    register: createLimiter(limits.registerRateLimit),
+    changePassword: createLimiter(limits.changePasswordRateLimit),
   };
 }

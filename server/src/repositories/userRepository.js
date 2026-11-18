@@ -22,6 +22,10 @@ export function createUserRepository(db) {
     updateTimezone({ id, timezone, changedAt }) {
       return db.prepare('UPDATE users SET timezone=?,timezone_changed_at=?,updated_at=? WHERE id=?').run(timezone,changedAt,changedAt,id).changes;
     },
+    updatePassword({ id, passwordHash, updatedAt }) {
+      return db.prepare('UPDATE users SET password_hash=?,token_version=token_version+1,updated_at=? WHERE id=?')
+        .run(passwordHash, updatedAt, id).changes;
+    },
     listActive() { return db.prepare('SELECT id,timezone,created_at AS createdAt FROM users ORDER BY id').all(); },
     create({ email, passwordHash, displayName, timezone, createdAt }) {
       const result = insertUserStatement.run(

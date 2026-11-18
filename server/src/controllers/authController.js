@@ -31,6 +31,11 @@ export function createAuthController({ db, env, gameEngine }) {
       setCookie(res, result.token);
       res.status(200).json(result.user);
     }),
+    changePassword: asyncHandler(async (req, res) => {
+      const result = await auth.changePassword(req.user.id, req.body);
+      setCookie(res, result.token);
+      res.json(result.user);
+    }),
     logout(_req, res) {
       const options = cookieOptions(env);
       delete options.maxAge;

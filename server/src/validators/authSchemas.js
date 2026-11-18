@@ -69,3 +69,15 @@ export const loginSchema = z.object({
 });
 
 export const logoutSchema = z.object({});
+
+const passwordSchema = z.string()
+  .min(AUTH_CONFIG.passwordMinLength, { error: `Password must be at least ${AUTH_CONFIG.passwordMinLength} characters.` })
+  .max(AUTH_CONFIG.passwordMaxLength, { error: `Password must be ${AUTH_CONFIG.passwordMaxLength} characters or fewer.` })
+  .superRefine((password, context) => {
+    if (!/\p{L}/u.test(password)) context.addIssue({ code: 'custom', message: 'Password must contain at least one letter.' });
+    if (!/[0-9]/.test(password)) context.addIssue({ code: 'custom', message: 'Password must contain at least one number.' });
+  });
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, { error: 'Enter your current password.' }).max(AUTH_CONFIG.passwordMaxLength),
+  newPassword: passwordSchema,
+}).strict();

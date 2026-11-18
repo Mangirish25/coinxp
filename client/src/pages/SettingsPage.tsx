@@ -1,8 +1,34 @@
 import { Pause, Play, Volume2, Vibrate } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
 import { useMotionPreferences } from '../motion/MotionProvider';
+import { apiDownload, apiFetch } from '../services/api';
+
+function validNewPassword(password: string) {
+  return password.length >= 8 && password.length <= 128 && /\p{L}/u.test(password) && /[0-9]/.test(password);
+}
 
 export function SettingsPage() {
   const { preferences, effectiveMode, quality, saving, error, setMotionMode, setCelebrations, setSound, setHaptics } = useMotionPreferences();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [accountMessage, setAccountMessage] = useState<string | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setAccountMessage(null); setAccountError(null);
+    if (!validNewPassword(newPassword)) { setAccountError('Use 8–128 characters with at least one letter and one number.'); return; }
+    setPasswordBusy(true);
+    try {
+      await apiFetch('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+      setCurrentPassword(''); setNewPassword(''); setAccountMessage('Your password was changed. Other signed-in sessions have been closed.');
+    } catch (cause) { setAccountError(cause instanceof Error ? cause.message : 'Could not change your password.'); }
+    finally { setPasswordBusy(false); }
+  }
+  async function downloadAccount() {
+    setAccountMessage(null); setAccountError(null);
+    try { await apiDownload('/api/account/export', 'coinxp-export.json'); setAccountMessage('Your private account export has been downloaded.'); }
+    catch (cause) { setAccountError(cause instanceof Error ? cause.message : 'Could not export your account.'); }
+  }
   return <section className="mx-auto max-w-3xl space-y-6">
     <header><p className="text-sm font-medium text-brand-700">A calmer CoinXP</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Settings</h1><p className="mt-2 text-sm text-ink-600">Choose how progress updates move and sound. These settings never change financial records or actions.</p></header>
     {error && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{error}</p>}
@@ -18,6 +44,17 @@ export function SettingsPage() {
       <option value="ALL">All updates</option><option value="MAJOR">Major milestones only</option><option value="OFF">Summary toasts only</option>
     </select></label><p className="mt-2 text-xs text-ink-500">Muted notification categories stay available in Account Updates.</p></section>
     <section className="rounded-2xl border bg-white p-5"><h2 className="font-semibold">Optional device feedback</h2><label className="mt-4 flex min-h-11 items-center justify-between gap-3 text-sm"><span className="inline-flex items-center gap-2"><Volume2 size={17} aria-hidden="true" />Sound</span><input type="checkbox" checked={preferences.sound} disabled={saving} onChange={(event) => void setSound(event.target.checked)} /></label><label className="mt-2 flex min-h-11 items-center justify-between gap-3 text-sm"><span className="inline-flex items-center gap-2"><Vibrate size={17} aria-hidden="true" />Haptic feedback</span><input type="checkbox" checked={preferences.haptics} disabled={saving} onChange={(event) => void setHaptics(event.target.checked)} /></label><p className="mt-2 text-xs text-ink-500">Sound has no audio assets yet. Haptics are only used where the device supports vibration.</p></section>
+    <section className="space-y-5 rounded-2xl border bg-white p-5" aria-labelledby="account-security-title"><div><h2 id="account-security-title" className="font-semibold">Account security and privacy</h2><p className="mt-1 text-sm text-ink-600">Change your password or download a copy of your CoinXP data.</p></div>
+      <form onSubmit={(event) => void changePassword(event)} className="space-y-3">
+        <label className="block text-sm font-medium">Current password<input autoComplete="current-password" required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border px-3" /></label>
+        <label className="block text-sm font-medium">New password<input autoComplete="new-password" required minLength={8} maxLength={128} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} aria-describedby="new-password-help" className="mt-1 min-h-11 w-full rounded-xl border px-3" /></label>
+        <p id="new-password-help" className="text-xs text-ink-500">8–128 characters, with at least one letter and one number.</p>
+        <button type="submit" disabled={passwordBusy || !currentPassword || !newPassword} className="min-h-11 rounded-xl bg-brand-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{passwordBusy ? 'Changing…' : 'Change password'}</button>
+      </form>
+      <div className="border-t pt-4"><button type="button" onClick={() => void downloadAccount()} className="min-h-11 rounded-xl border px-4 py-2 text-sm font-medium">Download my account data</button><p className="mt-2 text-xs text-ink-500">Exports are private and limited to one request per hour.</p></div>
+      {accountError && <p role="alert" className="text-sm text-red-700">{accountError}</p>}
+      {accountMessage && <p role="status" className="text-sm text-emerald-800">{accountMessage}</p>}
+    </section>
     <p role="status" aria-live="polite" className="text-sm text-ink-500">{saving ? 'Saving settings…' : 'Settings are saved automatically.'}</p>
   </section>;
 }

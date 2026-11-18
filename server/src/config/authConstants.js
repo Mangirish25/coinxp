@@ -17,6 +17,7 @@ export const AUTH_CONFIG = Object.freeze({
   }),
   loginRateLimit: Object.freeze({ windowMs: 15 * 60 * 1000, max: 10 }),
   registerRateLimit: Object.freeze({ windowMs: 15 * 60 * 1000, max: 10 }),
+  changePasswordRateLimit: Object.freeze({ windowMs: 15 * 60 * 1000, max: 5 }),
   defaultTimezone: 'Asia/Kolkata',
 });
 

@@ -28,9 +28,9 @@ function resolveTimezone(timezone) {
   }
 }
 
-function createToken(userId, secret) {
-  return jwt.sign({}, secret, {
-    subject: String(userId),
+function createToken(user, secret) {
+  return jwt.sign({ ver: user.token_version ?? 0 }, secret, {
+    subject: String(user.id),
     expiresIn: AUTH_CONFIG.tokenTtlSeconds,
     algorithm: 'HS256',
   });
@@ -69,7 +69,7 @@ export function createAuthService({ db, secret, gameEngine }) {
       }
 
       if (gameEngine) { try { gameEngine.processUser(user.id); } catch { /* registration remains successful after commit */ } }
-      return { user: publicUser(user), token: createToken(user.id, secret) };
+      return { user: publicUser(user), token: createToken(user, secret) };
     },
 
     async login({ email, password }) {
@@ -84,12 +84,32 @@ export function createAuthService({ db, secret, gameEngine }) {
         throw httpError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
       }
 
-      return { user: publicUser(user), token: createToken(user.id, secret) };
+      return { user: publicUser(user), token: createToken(user, secret) };
+    },
+
+    async changePassword(userId, { currentPassword, newPassword }) {
+      const user = users.findById(userId);
+      if (!user) throw httpError(404, 'USER_NOT_FOUND', 'User not found.');
+      const valid = await argon2.verify(user.password_hash, currentPassword).catch(() => false);
+      if (!valid) throw httpError(400, 'INVALID_PASSWORD', 'Your current password is incorrect.');
+      if (await argon2.verify(user.password_hash, newPassword).catch(() => false)) {
+        throw httpError(400, 'PASSWORD_REUSE', 'Choose a new password that you have not used before.');
+      }
+      const passwordHash = await argon2.hash(newPassword, AUTH_CONFIG.argon2Options);
+      const updatedAt = gameEngine?.clock.now().toISOString() ?? nowIso();
+      db.transaction(() => users.updatePassword({ id: userId, passwordHash, updatedAt }))();
+      const updated = users.findById(userId);
+      return { user: publicUser(updated), token: createToken(updated, secret) };
     },
 
     findPublicUserById(id) {
       const user = users.findById(id);
       return user ? publicUser(user) : null;
+    },
+
+    findSessionUserById(id) {
+      const user = users.findById(id);
+      return user ? { user: publicUser(user), tokenVersion: user.token_version ?? 0 } : null;
     },
 
     updateTimezone(id, timezone) {

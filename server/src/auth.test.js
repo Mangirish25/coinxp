@@ -72,7 +72,7 @@ describe('authentication endpoints', () => {
     const token = decodeURIComponent(
       cookie.split(';')[0].slice(cookie.split(';')[0].indexOf('=') + 1),
     );
-    expect(Object.keys(jwt.decode(token)).sort()).toEqual(['exp', 'iat', 'sub']);
+    expect(Object.keys(jwt.decode(token)).sort()).toEqual(['exp', 'iat', 'sub', 'ver']);
   });
 
   it('rejects duplicate email addresses regardless of casing', async () => {
@@ -116,6 +116,31 @@ describe('authentication endpoints', () => {
       .expect(200);
     expect(response.body).toEqual(registered.body);
     expect(response.headers['set-cookie'][0]).toContain('HttpOnly');
+  });
+
+  it('USR-008 changes passwords and invalidates every previously issued session token', async () => {
+    const registered = await register();
+    const cookie = cookieFrom(registered);
+    await request(app).post('/api/auth/change-password').set('Cookie', cookie).send({
+      currentPassword: registerBody.password, newPassword: 'another-safe-password-93',
+    }).expect(200, registered.body);
+    const rotatedCookie = (await request(app).post('/api/auth/login').send({
+      email: 'person@example.com', password: 'another-safe-password-93',
+    }).expect(200)).headers['set-cookie'][0].split(';')[0];
+    await request(app).get('/api/auth/me').set('Cookie', cookie).expect(401);
+    await request(app).get('/api/auth/me').set('Cookie', rotatedCookie).expect(200, registered.body);
+    const row = db.prepare('SELECT password_hash,token_version FROM users WHERE id=?').get(registered.body.id);
+    expect(row.token_version).toBe(1);
+    expect(row.password_hash).not.toBe('another-safe-password-93');
+    await expect(argon2.verify(row.password_hash, 'another-safe-password-93')).resolves.toBe(true);
+    const wrong = await request(app).post('/api/auth/change-password').set('Cookie', rotatedCookie).send({
+      currentPassword: 'wrong-password-83', newPassword: 'yet-another-password-94',
+    }).expect(400);
+    expect(wrong.body.error.code).toBe('INVALID_PASSWORD');
+    const reuse = await request(app).post('/api/auth/change-password').set('Cookie', rotatedCookie).send({
+      currentPassword: 'another-safe-password-93', newPassword: 'another-safe-password-93',
+    }).expect(400);
+    expect(reuse.body.error.code).toBe('PASSWORD_REUSE');
   });
 
   it('uses the same failure status and shape for a wrong password and unknown email', async () => {

@@ -36,3 +36,18 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (response.status === 204) return undefined as T;
   return body as T;
 }
+
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const response = await fetch(`${baseUrl}${path}`, { credentials: 'include' });
+  if (!response.ok) {
+    if (response.status === 401) unauthorizedHandler?.();
+    const payload = (await response.json().catch(() => null)) as ApiErrorShape | null;
+    throw new ApiError(payload?.error?.code ?? 'REQUEST_FAILED', payload?.error?.message ?? 'The download could not be completed.');
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

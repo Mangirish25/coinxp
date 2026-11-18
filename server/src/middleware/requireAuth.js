@@ -29,9 +29,14 @@ export function requireAuth({ db, secret, env }) {
       return next(httpError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'));
     }
 
-    const user = auth.findPublicUserById(userId);
-    if (!user) return next(httpError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'));
-    req.user = user;
+    if (payload.ver !== undefined && (!Number.isSafeInteger(payload.ver) || payload.ver < 0)) {
+      return next(httpError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'));
+    }
+    const session = auth.findSessionUserById(userId);
+    if (!session || session.tokenVersion !== (payload.ver ?? 0)) {
+      return next(httpError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'));
+    }
+    req.user = session.user;
     next();
   };
 }
