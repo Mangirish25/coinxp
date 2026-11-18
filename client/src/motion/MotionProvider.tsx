@@ -3,7 +3,7 @@ import { MotionConfig } from 'motion/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { uiPreferencesApi } from '../services/uiPreferencesApi';
-import { sampler, type QualityTier } from '../visuals/visuals.config';
+import { adaptQuality, initialQualityFor, sampler, type QualityTier } from '../visuals/visuals.config';
 import type { CelebrationPreference, UiPreferences, UserMotionMode } from '../types/uiPreferences';
 
 const storageKey = 'coinxp:ui-preferences:v1';
@@ -12,11 +12,11 @@ function readLocal(key = storageKey): UiPreferences {
   try { const value = localStorage.getItem(key); return value ? { ...defaults, ...JSON.parse(value) } : defaults; }
   catch { return defaults; }
 }
-function initialQuality(): QualityTier {
-  if (typeof navigator === 'undefined') return 'HIGH';
-  const cores = navigator.hardwareConcurrency ?? 8;
-  const memory = 'deviceMemory' in navigator ? Number((navigator as Navigator & { deviceMemory?: number }).deviceMemory) : 8;
-  return cores <= 2 || memory <= 2 ? 'LOW' : cores <= 4 || memory <= 4 ? 'MEDIUM' : 'HIGH';
+function deviceQualityCeiling(): QualityTier {
+  if (typeof navigator === 'undefined') return 'LOW';
+  const memory = 'deviceMemory' in navigator ? Number((navigator as Navigator & { deviceMemory?: number }).deviceMemory) : undefined;
+  const reducedData = 'connection' in navigator && Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData);
+  return initialQualityFor({ deviceMemory: memory, hardwareConcurrency: navigator.hardwareConcurrency, reducedData });
 }
 function osRequestsReducedMotion() {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -46,7 +46,8 @@ export function MotionProvider({ children }: { children: ReactNode }) {
   const localKey = user ? `${storageKey}:${user.id}` : storageKey;
   const queryClient = useQueryClient();
   const [local, setLocal] = useState(() => readLocal(localKey));
-  const [quality, setQuality] = useState<QualityTier>(initialQuality);
+  const [qualityCeiling] = useState<QualityTier>(deviceQualityCeiling);
+  const [quality, setQuality] = useState<QualityTier>(qualityCeiling);
   const [prefersReduced, setPrefersReduced] = useState(osRequestsReducedMotion);
   const [error, setError] = useState<string | null>(null);
   const preferencesQuery = useQuery({ queryKey: ['ui-preferences', user?.id], queryFn: uiPreferencesApi.get, enabled: user !== null });
@@ -72,26 +73,28 @@ export function MotionProvider({ children }: { children: ReactNode }) {
   useEffect(() => { setLocal(readLocal(localKey)); }, [localKey]);
   useEffect(() => {
     if (effectiveMode !== 'FULL' || document.visibilityState !== 'visible' || typeof requestAnimationFrame !== 'function') return undefined;
-    let frame = 0; let start = performance.now(); let last = start; let count = 0; let total = 0;
-    const changedAt = { current: performance.now() };
-    const steps: QualityTier[] = ['HIGH', 'MEDIUM', 'LOW'];
+    let frame = 0; let start = performance.now(); let last = start;
+    const frames: number[] = [];
+    let changedAt = performance.now();
     const sample = (now: number) => {
-      total += now - last; count += 1; last = now;
+      frames.push(now - last); last = now;
       if (now - start >= sampler.windowMs) {
-        const average = count ? total / count : 0;
+        const sortedFrames = [...frames].sort((a, b) => a - b);
+        const middle = Math.floor(sortedFrames.length / 2);
+        const median = sortedFrames.length % 2 ? sortedFrames[middle] : ((sortedFrames[middle - 1] ?? 0) + (sortedFrames[middle] ?? 0)) / 2;
         setQuality((current) => {
-          const index = steps.indexOf(current);
-          if (average > sampler.downgradeFrameMs && index < steps.length - 1) { changedAt.current = now; return steps[index + 1]; }
-          if (average < sampler.upgradeFrameMs && index > 0 && now - changedAt.current >= sampler.minDwellMs) { changedAt.current = now; return steps[index - 1]; }
-          return current;
+          const next = adaptQuality(current, frames, qualityCeiling);
+          if (next !== current && median < sampler.upgradeFrameMs && now - changedAt < sampler.minDwellMs) return current;
+          if (next !== current) changedAt = now;
+          return next;
         });
-        start = now; count = 0; total = 0;
+        start = now; frames.length = 0;
       }
       frame = requestAnimationFrame(sample);
     };
     frame = requestAnimationFrame(sample);
     return () => cancelAnimationFrame(frame);
-  }, [effectiveMode]);
+  }, [effectiveMode, qualityCeiling]);
 
   const save = useCallback(async (patch: Partial<UiPreferences>) => {
     const next = { ...preferences, ...patch, updatedAt: preferences.updatedAt };

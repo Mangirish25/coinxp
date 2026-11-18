@@ -53,3 +53,28 @@ export const visualBudgets = {
 
 export type QualityTier = keyof typeof qualityTiers;
 export type MotionMode = 'SYSTEM' | 'FULL' | 'REDUCED' | 'OFF';
+
+/** MOT-003: choose a device ceiling; adaptation may degrade but never exceed it. */
+export function initialQualityFor({ deviceMemory, hardwareConcurrency, reducedData = false }: {
+  deviceMemory?: number; hardwareConcurrency?: number; reducedData?: boolean;
+}): QualityTier {
+  const memory = deviceMemory ?? 0;
+  const cores = hardwareConcurrency ?? 0;
+  let selected: QualityTier = memory >= 4 && cores >= 4 ? 'HIGH' : memory >= 2 ? 'MEDIUM' : 'LOW';
+  if (reducedData && selected === 'HIGH') selected = 'MEDIUM';
+  return selected;
+}
+
+const qualityOrder: QualityTier[] = ['LOW', 'MEDIUM', 'HIGH'];
+export function adaptQuality(current: QualityTier, frameTimesMs: number[], ceiling: QualityTier): QualityTier {
+  if (!frameTimesMs.length) return current;
+  const frames = [...frameTimesMs].filter(Number.isFinite).sort((a, b) => a - b);
+  if (!frames.length) return current;
+  const middle = Math.floor(frames.length / 2);
+  const median = frames.length % 2 ? frames[middle] : (frames[middle - 1] + frames[middle]) / 2;
+  const index = qualityOrder.indexOf(current);
+  const ceilingIndex = qualityOrder.indexOf(ceiling);
+  if (median > sampler.downgradeFrameMs) return qualityOrder[Math.max(0, index - 1)];
+  if (median < sampler.upgradeFrameMs && index < ceilingIndex) return qualityOrder[index + 1];
+  return current;
+}
