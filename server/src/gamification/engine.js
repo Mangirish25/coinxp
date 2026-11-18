@@ -23,6 +23,7 @@ import { createRewardRepository } from '../repositories/rewardRepository.js';
 import { createBadgeService } from './rewards/badges.js';
 import { createMissionRepository } from '../repositories/missionRepository.js';
 import { createMissionService } from '../services/missionService.js';
+import { createChallengeService } from '../services/challengeService.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -62,6 +63,16 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   }
   const missions = createMissionService({ repository: missionRepository, facts, config, clock, localDate, reconcileKey, publish,
     insertNotice: (notice) => integrity.insertNotice(notice) });
+  function recordChallengeReward({userId,slug,xp,award}) {
+    if(!award)return null;
+    return reconcileKey({userId,key:`MIS-007:${slug}`,ruleId:'MIS-007',periodType:'once',periodKey:slug,desired:true,value:xp,reasonCode:'CHALLENGE_COMPLETED'});
+  }
+  const challengeEngine = { enabled, clock, rewardConfig:()=>config.rewards, rewardUnits:()=>config.units, localDate,
+    settlementConfig:()=>config.settlement,
+    purchaseState:(userId)=>{const state=ensureProgress(userId);return {level:state?.maxLevelReached??0,spendableXp:state?.spendableXp??0,lifetimeXp:state?.lifetimeXp??0};},
+    recordSpend, recordSpendRefund, recordChallengeReward, emitRewardEvent:(type,userId,data,key)=>publish(type,userId,data,key),
+    dependencies:{facts,missions:missionRepository} };
+  const challenges = createChallengeService({db,gameEngine:challengeEngine});
   function enqueue(event){
     if(!enabled)return null;
     const envelope=buildEnvelope(event,clock);
@@ -133,6 +144,17 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     ledger.updateProgress(userId,{lifetimeXp:progress.lifetimeXp,spendableXp:progress.spendableXp-costXp,
       maxLevelReached:progress.maxLevelReached,lastLedgerId:entryId,updatedAt:now});
     return {entryId,spendableXp:progress.spendableXp-costXp,lifetimeXp:progress.lifetimeXp,level:progress.maxLevelReached};
+  }
+
+  function recordSpendRefund({userId,purchaseId,costXp,spendLedgerId,now=nowIso()}) {
+    const progress=ensureProgress(userId);
+    if(!progress)throw httpError(404,'USER_NOT_FOUND','User not found.');
+    const spendableXp=safeTotal(BigInt(progress.spendableXp)+BigInt(costXp),'Spendable XP');
+    const entryId=ledger.insert({userId,entryType:'SPEND',ruleId:'XP-013',entitlementKey:null,transitionNo:null,
+      idempotencyKey:`u${userId}:SPEND:REFUND:${purchaseId}`,lifetimeDelta:0,balanceDelta:costXp,periodType:'once',periodKey:`REFUND:${purchaseId}`,
+      reversesEntryId:spendLedgerId,sourceEventId:null,reasonCode:'CHALLENGE_CANCEL_REFUND',note:null,configVersion:CONFIG_VERSION,actor:'system',createdAt:now});
+    ledger.updateProgress(userId,{lifetimeXp:progress.lifetimeXp,spendableXp,maxLevelReached:progress.maxLevelReached,lastLedgerId:entryId,updatedAt:now});
+    return {entryId,spendableXp,lifetimeXp:progress.lifetimeXp,level:progress.maxLevelReached};
   }
 
   function awardValue(ruleId) {
@@ -668,8 +690,9 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const reconciled = reconcileRange(userId,from,today);
     const releasedBadges = badges.releaseDeferred(userId);
     const releasedMissions = missions.releaseDeferred(userId);
+    const advancedChallenges = challenges.advance(userId, closeThrough(userId), (id, now) => integrity.hasActiveHoldForScope(id, 'OUTCOME_XP', now));
     const advancedMissions = missions.advance(userId, closeThrough(userId), (id, now) => integrity.hasActiveHoldForScope(id, 'OUTCOME_XP', now));
-    return { expired: expired.length, reconciled: reconciled.length + releasedBadges.length + releasedMissions.length + advancedMissions.length };
+    return { expired: expired.length, reconciled: reconciled.length + releasedBadges.length + releasedMissions.length + advancedChallenges.length + advancedMissions.length };
   }
 
   function runIntegrityAudit(userId, { persist = false } = {}) {
@@ -773,10 +796,13 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
-    advanceRewards:(userId)=>{ const missionResults=missions.advance(userId,closeThrough(userId),(id,now)=>integrity.hasActiveHoldForScope(id,'OUTCOME_XP',now)); missions.current(userId); return [...missionResults,...missions.releaseDeferred(userId),...badges.releaseDeferred(userId),...badges.evaluate(userId)]; },
+    advanceRewards:(userId)=>{ const hold=(id,now)=>integrity.hasActiveHoldForScope(id,'OUTCOME_XP',now); const challengeResults=challenges.advance(userId,closeThrough(userId),hold); const missionResults=missions.advance(userId,closeThrough(userId),hold); missions.current(userId); return [...challengeResults,...missionResults,...missions.releaseDeferred(userId),...badges.releaseDeferred(userId),...badges.evaluate(userId)]; },
     badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId), rerollMission:(userId,slot)=>missions.reroll(userId,slot),
     rewardConfig:()=>config.rewards, rewardUnits:()=>config.units, purchaseState:(userId)=>{const state=ensureProgress(userId);return {level:state?.maxLevelReached??0,spendableXp:state?.spendableXp??0,lifetimeXp:state?.lifetimeXp??0};},
-    recordSpend, emitRewardEvent:(type,userId,data,key)=>publish(type,userId,data,key),
+    recordSpend, recordSpendRefund, recordChallengeReward, emitRewardEvent:(type,userId,data,key)=>publish(type,userId,data,key),
+    challengeCatalog:(userId)=>challenges.catalog(userId), startChallenge:(userId,slug,key)=>challenges.start(userId,slug,key),
+    cancelChallenge:(userId,id)=>challenges.cancel(userId,id), abandonChallenge:(userId,id)=>challenges.abandon(userId,id),
+    challengeRun:(userId,id)=>challenges.run(userId,id),
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory,rewards,missions:missionRepository}};
 }
 
