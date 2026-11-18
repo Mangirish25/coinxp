@@ -21,6 +21,8 @@ import { theoreticalMaximum, checkTheoreticalCeiling } from './integrity/ceiling
 import { assertRewardCatalog } from './rewards/catalog.js';
 import { createRewardRepository } from '../repositories/rewardRepository.js';
 import { createBadgeService } from './rewards/badges.js';
+import { createMissionRepository } from '../repositories/missionRepository.js';
+import { createMissionService } from '../services/missionService.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -50,6 +52,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   const budgetHistory=createBudgetHistoryRepository(db);
   const integrity=createIntegrityRepository(db);
   const rewards=createRewardRepository(db);
+  const missionRepository=createMissionRepository(db);
   const budgets=createBudgetService({db,gameEngine:{clock}});
 
   function nowIso(){return clock.now().toISOString();}
@@ -57,6 +60,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const user=facts.user(userId); if(!user)throw httpError(401,'UNAUTHENTICATED','Please sign in to continue.');
     return localDateAt(instant,user.timezone);
   }
+  const missions = createMissionService({ repository: missionRepository, facts, config, clock, localDate });
   function enqueue(event){
     if(!enabled)return null;
     const envelope=buildEnvelope(event,clock);
@@ -753,8 +757,9 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
-    advanceRewards:(userId)=>badges.evaluate(userId), badgeCatalog:(userId)=>badges.catalog(userId),
-    dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory,rewards}};
+    advanceRewards:(userId)=>{ missions.current(userId); return badges.evaluate(userId); },
+    badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId),
+    dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory,rewards,missions:missionRepository}};
 }
 
 function cryptoRandom(){return randomUUID();}

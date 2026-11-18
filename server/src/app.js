@@ -16,6 +16,7 @@ import { createStreakAdvancer } from './gamification/streaks/advance.js';
 import { createStreakRoutes } from './routes/streakRoutes.js';
 import { createIntegrityRoutes } from './routes/integrityRoutes.js';
 import { createBadgeRoutes } from './routes/badgeRoutes.js';
+import { createMissionRoutes } from './routes/missionRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -45,6 +46,7 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/streaks', createStreakRoutes({ db, env, streakService }));
   app.use('/api/integrity', createIntegrityRoutes({ db, env, clock: gameEngine.clock }));
   app.use('/api/badges', createBadgeRoutes({ db, env, gameEngine }));
+  app.use('/api/missions', createMissionRoutes({ db, env, gameEngine }));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
