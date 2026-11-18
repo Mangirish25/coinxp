@@ -14,6 +14,12 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
         .sort((a,b) => priority[b.kind]-priority[a.kind] || b.id-a.id),
       pagination: { page: filters.page, pageSize: filters.pageSize, total: result.total, totalPages: Math.ceil(result.total/filters.pageSize) } };
     },
+    pendingCelebrations(userId) {
+      const result = repository.listNotices(userId, { page: 1, pageSize: 100, unreadOnly: true });
+      const codes = new Set(['LEVEL_UP','DAY_RECAP','STREAK_STARTED','STREAK_MILESTONE','STREAK_MILESTONE_REACHED','STREAK_FREEZE_USED',
+        'STREAK_BROKEN','STREAK_RESTORED','BADGE_UNLOCKED','MISSION_COMPLETED','CHALLENGE_COMPLETED','CHALLENGE_FAILED','PURCHASE_COMPLETED']);
+      return { data: result.data.filter(({ code }) => codes.has(code)) };
+    },
     acknowledge(userId, upToId) { repository.acknowledgeThrough(userId, upToId, now().toISOString()); return { acknowledgedThrough: upToId }; },
     status(userId) {
       const instant = now(); const hold = repository.activeHold(userId, instant.toISOString());

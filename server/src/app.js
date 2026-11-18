@@ -22,6 +22,7 @@ import { createChallengeRoutes } from './routes/challengeRoutes.js';
 import { createProfileRoutes } from './routes/profileRoutes.js';
 import { createActivityRoutes } from './routes/activityRoutes.js';
 import { createNotificationPreferenceRoutes } from './routes/notificationPreferenceRoutes.js';
+import { createCelebrationRoutes } from './routes/celebrationRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -57,6 +58,7 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/profile', createProfileRoutes({ db, env, gameEngine, streakService }));
   app.use('/api/activity', createActivityRoutes({ db, env }));
   app.use('/api/notifications', createNotificationPreferenceRoutes({ db, env, clock: gameEngine.clock }));
+  app.use('/api/celebrations', createCelebrationRoutes({ db, env, clock: gameEngine.clock }));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
