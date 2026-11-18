@@ -28,6 +28,18 @@ describe('Part 9 MIS-001/MIS-002 mission assignment', () => {
     expect(first.body.data.every(({ params }) => params.catalogVersion === '1.0.0')).toBe(true);
   });
 
+  it('MIS-008: returns paged mission history scoped to the authenticated owner', async () => {
+    const now='2026-11-01T00:00:00.000Z';
+    for (const [periodKey,status] of [['2026-11-01','COMPLETED'],['2026-11-02','EXPIRED']]) db.prepare(`INSERT INTO user_missions(user_id,slot,period_key,template_id,status,generation_seq,params_json,assigned_at,closed_at,xp_awarded,catalog_version)
+      VALUES(1,'DAILY',?,'dm_set_limit',?,0,'{}',?,?,5,'1.0.0')`).run(periodKey,status,now,now);
+    const other=await request(app).post('/api/auth/register').send({email:'mission-other@example.com',password:'securepass1',displayName:'Other'}).expect(201);
+    db.prepare(`INSERT INTO user_missions(user_id,slot,period_key,template_id,status,generation_seq,params_json,assigned_at,catalog_version)
+      VALUES(2,'DAILY','2026-11-03','dm_notes','COMPLETED',0,'{}',?,'1.0.0')`).run(now);
+    const result=await request(app).get('/api/missions/history?page=1&pageSize=1').set('Cookie',cookie).expect(200);
+    expect(result.body.data).toHaveLength(1); expect(result.body.data[0].periodKey).toBe('2026-11-02'); expect(result.body.pagination.total).toBe(2);
+    expect((await request(app).get('/api/missions/history').set('Cookie',other.headers['set-cookie'][0].split(';')[0]).expect(200)).body.pagination.total).toBe(1);
+  });
+
   it('MIS-005: replaces an assigned daily mission once using deterministic ranking', async () => {
     db.prepare('UPDATE users SET created_at=? WHERE id=1').run('2026-11-01T00:00:00.000Z');
     const before = await request(app).get('/api/missions').set('Cookie', cookie).expect(200);

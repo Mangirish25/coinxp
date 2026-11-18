@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CalendarCheck2, CalendarDays, CalendarRange, Target } from 'lucide-react';
+import { CalendarCheck2, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Target } from 'lucide-react';
+import { useState } from 'react';
 import { missionApi } from '../services/missionApi';
 
 const slotLabels = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly' } as const;
@@ -10,7 +11,9 @@ function missionTitle(templateId: string) {
 }
 
 export function MissionsPage() {
+  const [historyPage,setHistoryPage]=useState(1);
   const missions = useQuery({ queryKey: ['missions', 'current'], queryFn: missionApi.current });
+  const history = useQuery({ queryKey: ['missions','history',historyPage], queryFn:()=>missionApi.history(historyPage) });
   const reroll = useMutation({ mutationFn: missionApi.reroll });
   return <section className="mx-auto max-w-5xl space-y-6">
     <header><p className="text-sm font-medium text-brand-600">Small goals, steady habits</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Missions</h1><p className="mt-2 text-sm text-ink-500">Missions are assigned from your current habits and checked when their period closes.</p></header>
@@ -18,5 +21,6 @@ export function MissionsPage() {
     {missions.isError && <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">Missions could not load. <button className="underline" onClick={() => void missions.refetch()}>Retry</button></div>}
     {reroll.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{reroll.error instanceof Error ? reroll.error.message : 'Mission could not be rerolled.'}</p>}
     {missions.data && (missions.data.data.length ? <div className="grid gap-4 md:grid-cols-3">{missions.data.data.map((mission) => { const Icon = icons[mission.slot]; const canReroll = mission.status === 'ASSIGNED' && mission.generationSeq === 0 && mission.slot !== 'MONTHLY'; return <article key={mission.id} className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm"><span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-700"><Icon aria-hidden="true" /></span><p className="mt-4 text-xs font-medium uppercase tracking-wide text-ink-500">{slotLabels[mission.slot]} · {mission.periodKey}</p><h2 className="mt-1 text-lg font-semibold">{missionTitle(mission.templateId)}</h2><p className="mt-3 flex items-center gap-2 text-sm text-ink-600"><Target size={15} aria-hidden="true" />{mission.status === 'ASSIGNED' ? 'In progress · verified at period close' : mission.status}</p>{canReroll && <button type="button" disabled={reroll.isPending} onClick={() => reroll.mutate(mission.slot)} className="mt-4 rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50">{reroll.isPending ? 'Choosing another…' : 'Reroll mission'}</button>}</article>; })}</div> : <div className="rounded-2xl border bg-white p-6"><h2 className="font-semibold">Missions will appear soon</h2><p className="mt-2 text-sm text-ink-500">New accounts need a little history before the first mission is assigned.</p></div>)}
+    <section className="space-y-3"><div><h2 className="text-xl font-semibold">Mission history</h2><p className="text-sm text-ink-500">Completed, expired and replaced assignments.</p></div>{history.isLoading?<div className="h-20 animate-pulse rounded-xl bg-white"/>:history.isError?<p role="alert" className="rounded-xl bg-red-50 p-4">History could not load. <button className="underline" onClick={()=>void history.refetch()}>Retry</button></p>:<div className="overflow-hidden rounded-xl border border-black/5 bg-white">{history.data?.data.map((item)=><div key={item.id} className="flex items-center justify-between gap-3 border-b border-black/5 p-3 text-sm last:border-0"><span>{missionTitle(item.templateId)} · {item.slot.toLowerCase()} · {item.periodKey}</span><span className="text-ink-500">{item.status}{item.xpAwarded>0?` · +${item.xpAwarded} XP`:''}</span></div>)}{history.data?.data.length===0&&<p className="p-4 text-sm text-ink-500">No mission history yet.</p>}</div>}{history.data&&history.data.pagination?.totalPages>1&&<div className="flex items-center justify-end gap-3"><button aria-label="Previous mission history page" disabled={historyPage<=1} onClick={()=>setHistoryPage((page)=>page-1)} className="rounded-lg border bg-white p-2 disabled:opacity-40"><ChevronLeft size={16}/></button><span className="text-sm">Page {historyPage} of {history.data.pagination?.totalPages}</span><button aria-label="Next mission history page" disabled={historyPage>=(history.data.pagination?.totalPages??1)} onClick={()=>setHistoryPage((page)=>page+1)} className="rounded-lg border bg-white p-2 disabled:opacity-40"><ChevronRight size={16}/></button></div>}</section>
   </section>;
 }

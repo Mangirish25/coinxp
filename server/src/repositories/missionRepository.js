@@ -8,6 +8,13 @@ export function createMissionRepository(db) {
   return {
     transaction(work) { return db.transaction(work)(); },
     rows,
+    history(userId, page, pageSize) {
+      const total = db.prepare('SELECT count(*) AS total FROM user_missions WHERE user_id=?').get(userId).total;
+      const data = db.prepare(`SELECT id,slot,period_key AS periodKey,template_id AS templateId,status,generation_seq AS generationSeq,
+        assigned_at AS assignedAt,closed_at AS closedAt,xp_awarded AS xpAwarded FROM user_missions WHERE user_id=?
+        ORDER BY period_key DESC,id DESC LIMIT ? OFFSET ?`).all(userId,pageSize,(page-1)*pageSize);
+      return { data, total };
+    },
     closeCandidates(userId) {
       return db.prepare("SELECT id,user_id AS userId,slot,period_key AS periodKey,template_id AS templateId,status,generation_seq AS generationSeq,params_json AS paramsJson,assigned_at AS assignedAt,closed_at AS closedAt,xp_awarded AS xpAwarded FROM user_missions WHERE user_id=? AND status IN ('ASSIGNED','DEFERRED') ORDER BY period_key,slot,id")
         .all(userId).map(({ paramsJson, ...row }) => ({ ...row, params: JSON.parse(paramsJson) }));

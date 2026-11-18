@@ -797,7 +797,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
     advanceRewards:(userId)=>{ const hold=(id,now)=>integrity.hasActiveHoldForScope(id,'OUTCOME_XP',now); const challengeResults=challenges.advance(userId,closeThrough(userId),hold); const missionResults=missions.advance(userId,closeThrough(userId),hold); missions.current(userId); return [...challengeResults,...missionResults,...missions.releaseDeferred(userId),...badges.releaseDeferred(userId),...badges.evaluate(userId)]; },
-    badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId), rerollMission:(userId,slot)=>missions.reroll(userId,slot),
+    badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId), missionHistory:(userId,filters)=>missions.history(userId,filters), rerollMission:(userId,slot)=>missions.reroll(userId,slot),
     rewardConfig:()=>config.rewards, rewardUnits:()=>config.units, purchaseState:(userId)=>{const state=ensureProgress(userId);return {level:state?.maxLevelReached??0,spendableXp:state?.spendableXp??0,lifetimeXp:state?.lifetimeXp??0};},
     recordSpend, recordSpendRefund, recordChallengeReward, emitRewardEvent:(type,userId,data,key)=>publish(type,userId,data,key),
     challengeCatalog:(userId)=>challenges.catalog(userId), startChallenge:(userId,slug,key)=>challenges.start(userId,slug,key),

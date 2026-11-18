@@ -45,6 +45,11 @@ export function createMissionService({ repository, facts, config, clock, localDa
     return { data: slots.map((slot) => materialize(userId, slot, slotKey(slot, date))).filter(Boolean) };
   }
 
+  function history(userId, { page = 1, pageSize = 20 }) {
+    const result = repository.history(userId,page,pageSize);
+    return { data: result.data, pagination: { page,pageSize,total:result.total,totalPages:Math.ceil(result.total/pageSize) } };
+  }
+
   function reroll(userId, requestedSlot) {
     const slot = String(requestedSlot).toUpperCase();
     if (!slots.includes(slot)) throw httpError(400, 'INVALID_MISSION_SLOT', 'Choose a daily, weekly or monthly mission slot.');
@@ -120,5 +125,5 @@ export function createMissionService({ repository, facts, config, clock, localDa
     return released;
   }
 
-  return { current, materialize, reroll, advance, releaseDeferred };
+  return { current, history, materialize, reroll, advance, releaseDeferred };
 }
