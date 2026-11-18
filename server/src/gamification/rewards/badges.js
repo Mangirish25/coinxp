@@ -21,7 +21,7 @@ export function createBadgeService({ db, repository, config, clock, localDate, r
       order.get(left.category) - order.get(right.category) || left.slug.localeCompare(right.slug));
   }
 
-  function evaluate(userId, families = config.rewards.badges) {
+  function evaluate(userId, families = config.rewards.badges, { awardXp = true, summaryNotice = false } = {}) {
     if (!config.rewards.badges.length) return [];
     const now = clock.now().toISOString();
     const unlocked = [];
@@ -47,10 +47,10 @@ export function createBadgeService({ db, repository, config, clock, localDate, r
             if (metric.value < thresholds[index] || repository.badge(userId, family.slug, tier)) continue;
             const { rarity, xp } = badgeTier(config.rewards, family, tier);
             const achievedOn = metric.achievedOn ?? localDate(userId);
-            if (!repository.insertBadge({ userId, slug: family.slug, tier, rarity, xpAwarded: xp, unlockedAt: now,
+            if (!repository.insertBadge({ userId, slug: family.slug, tier, rarity, xpAwarded: awardXp ? xp : 0, unlockedAt: now,
               achievedOn, source: metric.source, catalogVersion: config.rewards.catalogVersion })) continue;
             const key = family.type === 'REPEATABLE' ? `BAD-003:${family.slug}:1` : `BAD-003:${family.slug}:${tier}`;
-            reconcileKey({ userId, key, ruleId: 'BAD-003', periodType: 'once', periodKey: key, desired: true,
+            if (awardXp) reconcileKey({ userId, key, ruleId: 'BAD-003', periodType: 'once', periodKey: key, desired: true,
               value: xp, reasonCode: 'BADGE_UNLOCKED' });
             const result = { slug: family.slug, tier, rarity, xpAwarded: xp, achievedOn, name: family.slug.replaceAll('_', ' ') };
             passUnlocked.push(result);
@@ -63,7 +63,7 @@ export function createBadgeService({ db, repository, config, clock, localDate, r
         }
         if (passUnlocked.length) {
           const names = passUnlocked.slice(0, config.rewards.notifications.maxBadgeNamesPerNotice).map(({ name, tier }) => `${name} (tier ${tier})`);
-          insertNotice({ userId, kind: 'REWARD', code: 'BADGE_UNLOCKED',
+          insertNotice({ userId, kind: 'REWARD', code: summaryNotice ? 'BADGE_BACKFILL_SUMMARY' : 'BADGE_UNLOCKED',
             data: { badges: names, moreCount: Math.max(0, passUnlocked.length - names.length) },
             dedupeKey: `BADGES:${userId}:${passUnlocked.map(({ slug, tier }) => `${slug}:${tier}`).join('|')}`, createdAt: now });
         }
