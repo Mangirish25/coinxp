@@ -11,7 +11,7 @@ const equipSchema = z.object({ slot: z.enum(['THEME','FRAME']), itemSlug: z.stri
 
 export function createProfileRoutes({ db, env, gameEngine, streakService }) {
   const router = Router();
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const controller = createProfileController(createProfileService({ db,gameEngine,streakService }));
   router.get('/',controller.get);
   router.post('/showcase',requireJson,validateBody(showcaseSchema),controller.showcase);

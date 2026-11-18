@@ -8,7 +8,7 @@ import { acknowledgeNoticeSchema, appealSchema, noticeQuerySchema } from '../val
 
 export function createIntegrityRoutes(options) {
   const router = Router(); const controller = createIntegrityController(options);
-  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret }));
+  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret, env: options.env }));
   router.get('/status',controller.status);
   router.get('/notices',validateQuery(noticeQuerySchema),controller.notices);
   router.post('/notices/ack',requireJson,validateBody(acknowledgeNoticeSchema),controller.acknowledge);

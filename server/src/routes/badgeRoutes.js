@@ -4,7 +4,7 @@ import { createBadgeController } from '../controllers/badgeController.js';
 
 export function createBadgeRoutes({ db, env, gameEngine }) {
   const router = Router();
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   router.get('/', createBadgeController(gameEngine).catalog);
   return router;
 }

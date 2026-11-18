@@ -20,5 +20,9 @@ export const AUTH_CONFIG = Object.freeze({
   defaultTimezone: 'Asia/Kolkata',
 });
 
+export function authCookieName(env) {
+  return env?.nodeEnv === 'production' ? '__Host-coinxp' : AUTH_CONFIG.cookieName;
+}
+
 export const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=19456,t=2,p=1$sNyBp4FDIvrRrDjcA0nqww$0nJVzjBscDQBcM2qgmhDgQs05IC3d/rvjtHbruaYsxI';

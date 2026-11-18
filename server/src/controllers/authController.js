@@ -1,4 +1,4 @@
-import { AUTH_CONFIG } from '../config/authConstants.js';
+import { AUTH_CONFIG, authCookieName } from '../config/authConstants.js';
 import { createAuthService } from '../services/authService.js';
 
 function asyncHandler(handler) {
@@ -17,7 +17,8 @@ function cookieOptions(env) {
 
 export function createAuthController({ db, env, gameEngine }) {
   const auth = createAuthService({ db, secret: env.jwtSecret, gameEngine });
-  const setCookie = (res, token) => res.cookie(AUTH_CONFIG.cookieName, token, cookieOptions(env));
+  const cookieName = authCookieName(env);
+  const setCookie = (res, token) => res.cookie(cookieName, token, cookieOptions(env));
 
   return {
     register: asyncHandler(async (req, res) => {
@@ -33,7 +34,7 @@ export function createAuthController({ db, env, gameEngine }) {
     logout(_req, res) {
       const options = cookieOptions(env);
       delete options.maxAge;
-      res.clearCookie(AUTH_CONFIG.cookieName, options);
+      res.clearCookie(cookieName, options);
       res.status(204).end();
     },
     me(req, res) {

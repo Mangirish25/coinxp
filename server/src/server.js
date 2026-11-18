@@ -8,13 +8,14 @@ const env = loadEnv();
 const db = createDatabase(env.dbPath);
 migrateDatabase(db);
 const app = createApp({ db, config: env });
-const scheduler = startGamificationScheduler(app.locals.gameEngine, { db, streakAdvancer: app.locals.streakService });
+const scheduler = env.schedulerEnabled ? startGamificationScheduler(app.locals.gameEngine, { db, streakAdvancer: app.locals.streakService }) : null;
+app.locals.scheduler = scheduler;
 const server = app.listen(env.port, () => console.log(`CoinXP API listening on port ${env.port}`));
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () =>
     server.close(() => {
-      scheduler.stop();
+      scheduler?.stop();
       db.close();
       process.exit(0);
     }),

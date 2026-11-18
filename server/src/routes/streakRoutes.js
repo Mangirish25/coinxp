@@ -16,7 +16,7 @@ const pageSchema = z.object({ page: z.coerce.number().int().min(1).default(1), p
 
 export function createStreakRoutes({ db, env, streakService }) {
   const router = Router();
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const controller = createStreakController(streakService);
   router.get('/', controller.summary);
   router.get('/tracking/calendar', validateQuery(calendarSchema, 'INVALID_RANGE'), (req, res, next) => {

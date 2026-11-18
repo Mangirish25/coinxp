@@ -166,6 +166,22 @@ describe('authentication endpoints', () => {
     expect(response.headers['set-cookie'][0]).toMatch(/Expires=Thu, 01 Jan 1970 00:00:00 GMT/);
   });
 
+  it('SEC-001 uses a __Host secure cookie and exact origin checks in production', async () => {
+    const productionApp = createApp({ db, config: {
+      clientOrigin: 'https://coinxp.example', publicOrigin: 'https://coinxp.example',
+      nodeEnv: 'production', jwtSecret: secret, trustProxy: 1,
+    }, logger: { info() {} } });
+    const response = await request(productionApp).post('/api/auth/register')
+      .set('Origin', 'https://coinxp.example').send({ ...registerBody, email: 'prod@example.com' }).expect(201);
+    expect(response.headers['set-cookie'][0]).toContain('__Host-coinxp=');
+    expect(response.headers['set-cookie'][0]).toContain('Secure');
+    expect(response.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(response.headers['x-powered-by']).toBeUndefined();
+    await request(productionApp).post('/api/auth/logout').send({}).expect(403);
+    await request(productionApp).post('/api/auth/logout').set('Origin', 'https://coinxp.example')
+      .set('Cookie', response.headers['set-cookie'][0].split(';')[0]).send({}).expect(204);
+  });
+
   it('limits login attempts and requires JSON on state-changing routes', async () => {
     const limitedApp = createApp({
       db,
@@ -205,6 +221,7 @@ describe('authentication endpoints', () => {
     });
     const response = await request(productionApp)
       .post('/api/auth/register')
+      .set('Origin', 'https://coinxp.example')
       .send({ ...registerBody, email: 'secure@example.com' })
       .expect(201);
     expect(response.headers['set-cookie'][0]).toContain('Secure');

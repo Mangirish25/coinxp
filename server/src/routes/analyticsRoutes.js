@@ -12,7 +12,7 @@ import {
 export function createAnalyticsRoutes({ db, env }) {
   const router = Router();
   const controller = createAnalyticsController({ db });
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   router.get(
     '/category-breakdown',
     validateQuery(categoryBreakdownQuerySchema, 'INVALID_RANGE'),

@@ -9,7 +9,7 @@ const schema = z.object({ motionMode: z.enum(['SYSTEM','FULL','REDUCED','OFF']),
 
 export function createUiPreferenceRoutes(options) {
   const router = Router();
-  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret }));
+  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret, env: options.env }));
   const controller = createUiPreferenceController(options);
   router.get('/', controller.get);
   router.put('/', requireJson, validateBody(schema), controller.save);

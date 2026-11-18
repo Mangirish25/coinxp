@@ -15,7 +15,7 @@ import {
 export function createCategoryRoutes({ db, env }) {
   const router = Router();
   const controller = createCategoryController({ db });
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   router.get('/', validateQuery(categoryListQuerySchema), controller.list);
   router.post('/', requireJson, validateBody(createCategorySchema), controller.create);
   router.patch(

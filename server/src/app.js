@@ -27,21 +27,36 @@ import { createUiPreferenceRoutes } from './routes/uiPreferenceRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { originGuard } from './middleware/originGuard.js';
+import { createTestClockRoutes } from './routes/testClockRoutes.js';
 
 export function createApp({ db, config, logger, gamificationHandler, clock } = {}) {
   if (!db) throw new Error('createApp requires a database connection.');
   const env = config ?? loadEnv();
+  if (env.nodeEnv === 'production' && env.enableTestClock) throw new Error('ENABLE_TEST_CLOCK cannot be enabled in production.');
   const app = express();
+  app.disable('x-powered-by');
+  if (env.trustProxy !== undefined) app.set('trust proxy', env.trustProxy);
   const gameEngine = createGamificationEngine({ db, logger, clock, enabled: env.gamificationEnabled !== false });
   const streakService = createStreakAdvancer({ db, gameEngine, config: undefined, clock, logger });
   app.locals.gameEngine = gameEngine;
   app.locals.streakService = streakService;
-  app.use(helmet());
-  app.use(cors({ origin: env.clientOrigin, credentials: true }));
+  app.use(helmet(env.nodeEnv === 'production' ? {
+    contentSecurityPolicy: { directives: {
+      defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrcElem: ["'self'"], styleSrcAttr: ["'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'], connectSrc: ["'self'"], fontSrc: ["'self'"], frameAncestors: ["'none'"],
+      baseUri: ["'none'"], formAction: ["'self'"],
+    } },
+    referrerPolicy: { policy: 'same-origin' },
+    permissionsPolicy: { features: { accelerometer: [], camera: [], geolocation: [], gyroscope: [], magnetometer: [] } },
+  } : undefined));
+  if (env.nodeEnv !== 'production') app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(cookieParser());
-  app.use(express.json({ limit: '10kb' }));
+  app.use((req, res, next) => express.json({ limit: req.path.startsWith('/api/auth') ? '10kb' : '100kb' })(req, res, next));
+  app.use(originGuard({ enabled: env.nodeEnv === 'production', origin: env.publicOrigin ?? env.clientOrigin }));
   app.use(requestLogger(logger));
-  app.use('/api', createHealthRoutes(db, gameEngine));
+  app.locals.scheduler = null;
+  app.use('/api', createHealthRoutes(db, gameEngine, { env, getScheduler: () => app.locals.scheduler }));
   app.use('/api/auth', createAuthRoutes({ db, env, rateLimits: env.authRateLimits, gameEngine }));
   const apiOptions = { db, env, logger, eventHandler: gamificationHandler, gameEngine };
   app.use('/api/categories', createCategoryRoutes(apiOptions));
@@ -61,6 +76,9 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/notifications', createNotificationPreferenceRoutes({ db, env, clock: gameEngine.clock }));
   app.use('/api/celebrations', createCelebrationRoutes({ db, env, clock: gameEngine.clock }));
   app.use('/api/ui/preferences', createUiPreferenceRoutes({ db, env, clock: gameEngine.clock }));
+  if (env.nodeEnv === 'test' && env.enableTestClock && clock?.set && clock?.advance) {
+    app.use('/api/test/clock', createTestClockRoutes(clock));
+  }
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

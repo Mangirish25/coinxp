@@ -7,7 +7,7 @@ import { createNotificationPreferenceService } from '../services/notificationPre
 import { createNotificationPreferenceController } from '../controllers/notificationPreferenceController.js';
 
 export function createNotificationPreferenceRoutes({ db, env, clock }) {
-  const router = Router(); router.use(requireAuth({ db, secret: env.jwtSecret }));
+  const router = Router(); router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const controller = createNotificationPreferenceController(createNotificationPreferenceService({ db, clock }));
   router.get('/preferences',controller.get);
   router.put('/preferences',requireJson,validateBody(notificationPreferencesSchema),controller.put);

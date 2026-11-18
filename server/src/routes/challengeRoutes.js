@@ -14,7 +14,7 @@ const emptyBody = z.object({}).strict();
 
 export function createChallengeRoutes({ db, env, gameEngine }) {
   const router = Router();
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const controller = createChallengeController(gameEngine);
   const rewardConfig = gameEngine.rewardConfig();
   const rate = rateLimit({ windowMs: rewardConfig.shop.purchaseWindowSeconds * gameEngine.rewardUnits().millisecondsPerSecond,

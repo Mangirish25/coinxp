@@ -14,7 +14,7 @@ const ledgerQuery = z.object({ page: z.coerce.number().int().min(1).default(1), 
 export function createGamificationRoutes({ db, env, gameEngine }) {
   const router = Router();
   router.get('/rules', (_req, res) => res.json(gameEngine.publicRules()));
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const reviewLimit = rateLimit({ windowMs: rules.rateLimits.windowSeconds * 1000, limit: rules.rateLimits.reviewPerMinute, standardHeaders: 'draft-7', legacyHeaders: false,
     handler: (_req, res) => res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many review requests. Please try again later.' } }) });
   router.get('/summary', (req, res) => res.json(gameEngine.summary(req.user.id)));

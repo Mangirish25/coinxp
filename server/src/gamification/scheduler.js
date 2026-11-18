@@ -7,6 +7,7 @@ export function startGamificationScheduler(engine, { db, streakAdvancer, clock =
   const interval = intervalMs ?? rules.settlement.schedulerIntervalMinutes * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond;
   let running = false;
   let stopped = false;
+  let lastHeartbeatAt = null;
   let lastReconciliation = 0;
   let lastAudit = 0;
   async function tick() {
@@ -39,10 +40,10 @@ export function startGamificationScheduler(engine, { db, streakAdvancer, clock =
       outbox.purgeIdempotency(new Date(clock.now().getTime() - rules.idempotency.ttlHours * rules.units.minutesPerHour * rules.units.secondsPerMinute * rules.units.millisecondsPerSecond).toISOString());
     } catch (error) {
       try { logger.error?.('Gamification scheduler cycle failed.', error); } catch { /* logger failures are ignored */ }
-    } finally { running = false; }
+    } finally { running = false; lastHeartbeatAt = clock.now().toISOString(); }
   }
   const timer = setInterval(tick, interval);
   timer.unref?.();
   void tick();
-  return { tick, stop() { stopped = true; clearInterval(timer); } };
+  return { tick, getStatus: () => ({ running, lastHeartbeatAt }), stop() { stopped = true; clearInterval(timer); } };
 }

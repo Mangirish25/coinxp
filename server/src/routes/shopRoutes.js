@@ -12,7 +12,7 @@ const purchaseSchema = z.object({ itemSlug: z.string().min(1).max(60) }).strict(
 
 export function createShopRoutes({ db, env, gameEngine, streakService }) {
   const router = Router();
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const service = createShopService({ db, gameEngine, streakService });
   const controller = createShopController(service);
   const rate = rateLimit({ windowMs: gameEngine.rewardConfig().shop.purchaseWindowSeconds * gameEngine.rewardUnits().millisecondsPerSecond,

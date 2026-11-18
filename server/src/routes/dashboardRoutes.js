@@ -7,7 +7,7 @@ import { dashboardSummaryQuerySchema } from '../validators/analyticsSchemas.js';
 export function createDashboardRoutes({ db, env }) {
   const router = Router();
   const controller = createDashboardController({ db });
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   router.get('/summary', validateQuery(dashboardSummaryQuerySchema), controller.summary);
   return router;
 }

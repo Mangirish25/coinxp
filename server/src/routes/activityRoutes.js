@@ -7,7 +7,7 @@ import { createActivityController } from '../controllers/activityController.js';
 import { httpError } from '../utils/httpError.js';
 
 export function createActivityRoutes({ db, env }) {
-  const router = Router(); router.use(requireAuth({ db, secret: env.jwtSecret }));
+  const router = Router(); router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const controller = createActivityController(createActivityService({ db }));
   router.get('/',validateQuery(activityQuerySchema),(req,res,next) => {
     let beforeId = null;

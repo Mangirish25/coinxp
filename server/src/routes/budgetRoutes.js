@@ -16,7 +16,7 @@ import {
 export function createBudgetRoutes(options) {
   const router = Router();
   const controller = createBudgetController(options);
-  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret }));
+  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret, env: options.env }));
   router.put('/', requireJson, validateBody(upsertBudgetSchema), controller.upsert);
   router.get('/', validateQuery(budgetListQuerySchema), controller.list);
   router.get('/status', validateQuery(budgetStatusQuerySchema), controller.status);

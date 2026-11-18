@@ -9,7 +9,7 @@ const historyQuery = z.object({ page: z.coerce.number().int().min(1).default(1),
 
 export function createMissionRoutes({ db, env, gameEngine }) {
   const router = Router();
-  router.use(requireAuth({ db, secret: env.jwtSecret }));
+  router.use(requireAuth({ db, secret: env.jwtSecret, env }));
   const controller = createMissionController({ current: gameEngine.missionCurrent, history: gameEngine.missionHistory, reroll: gameEngine.rerollMission });
   router.get('/', controller.list);
   router.get('/history',validateQuery(historyQuery),controller.history);

@@ -26,7 +26,7 @@ export function createTransactionRoutes(options) {
     }
     next();
   };
-  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret }));
+  router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret, env: options.env }));
   const writeLimit = rateLimit({ windowMs: rules.rateLimits.windowSeconds * 1000, limit: rules.rateLimits.transactionWritesPerMinute, standardHeaders: 'draft-7', legacyHeaders: false,
     handler: (_req, res) => res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many transaction changes. Please try again later.' } }) });
   router.post('/', writeLimit, requireJson, validateIdempotency, validateBody(createTransactionSchema), controller.create);

@@ -12,7 +12,7 @@ export function createAuthRoutes({ db, env, rateLimits = AUTH_CONFIG, gameEngine
   const router = Router();
   const controller = createAuthController({ db, env, gameEngine });
   const limiters = createAuthRateLimiters(rateLimits);
-  const authenticated = requireAuth({ db, secret: env.jwtSecret });
+  const authenticated = requireAuth({ db, secret: env.jwtSecret, env });
 
   router.post(
     '/register',

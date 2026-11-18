@@ -19,4 +19,14 @@ describe('environment validation', () => {
   it('accepts the development secret and keeps in-memory database paths', () => {
     expect(loadEnv(base)).toMatchObject({ nodeEnv: 'development', dbPath: ':memory:' });
   });
+
+  it('requires explicit production origin and proxy configuration', () => {
+    const prod = { ...base, NODE_ENV: 'production', JWT_SECRET: 'a'.repeat(40) };
+    expect(() => loadEnv(prod)).toThrow('PUBLIC_ORIGIN, TRUST_PROXY');
+    expect(loadEnv({ ...prod, PUBLIC_ORIGIN: 'https://coinxp.example', TRUST_PROXY: '1' })).toMatchObject({
+      publicOrigin: 'https://coinxp.example', trustProxy: 1,
+    });
+    expect(() => loadEnv({ ...prod, PUBLIC_ORIGIN: 'https://coinxp.example', TRUST_PROXY: '1', ENABLE_TEST_CLOCK: '1' }))
+      .toThrow('ENABLE_TEST_CLOCK cannot be enabled in production.');
+  });
 });
