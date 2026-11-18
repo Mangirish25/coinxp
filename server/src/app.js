@@ -24,6 +24,7 @@ import { createActivityRoutes } from './routes/activityRoutes.js';
 import { createNotificationPreferenceRoutes } from './routes/notificationPreferenceRoutes.js';
 import { createCelebrationRoutes } from './routes/celebrationRoutes.js';
 import { createUiPreferenceRoutes } from './routes/uiPreferenceRoutes.js';
+import { createAccountRoutes } from './routes/accountRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -76,6 +77,7 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/notifications', createNotificationPreferenceRoutes({ db, env, clock: gameEngine.clock }));
   app.use('/api/celebrations', createCelebrationRoutes({ db, env, clock: gameEngine.clock }));
   app.use('/api/ui/preferences', createUiPreferenceRoutes({ db, env, clock: gameEngine.clock }));
+  app.use('/api/account', createAccountRoutes({ db, env, clock: gameEngine.clock }));
   if (env.nodeEnv === 'test' && env.enableTestClock && clock?.set && clock?.advance) {
     app.use('/api/test/clock', createTestClockRoutes(clock));
   }
