@@ -14,6 +14,7 @@ import { XpPage } from './pages/XpPage';
 import { StreaksPage } from './pages/StreaksPage';
 import { BadgesPage } from './pages/BadgesPage';
 import { MissionsPage } from './pages/MissionsPage';
+import { ShopPage } from './pages/ShopPage';
 
 export function App() {
   return (
@@ -35,6 +36,7 @@ export function App() {
               <Route path="streaks" element={<StreaksPage />} />
               <Route path="badges" element={<BadgesPage />} />
               <Route path="missions" element={<MissionsPage />} />
+              <Route path="shop" element={<ShopPage />} />
             </Route>
           </Route>
         </Routes>
