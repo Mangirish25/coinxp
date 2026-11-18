@@ -10,6 +10,7 @@ export function createCelebrationRoutes(options) {
   router.use(requireAuth({ db: options.db, secret: options.env.jwtSecret, env: options.env }));
   const controller = createCelebrationController(options);
   router.get('/pending', controller.pending);
+  router.post('/claim', requireJson, validateBody(z.object({}).strict()), controller.claim);
   router.post('/ack', requireJson, validateBody(z.object({ upToId: z.number().int().positive().safe() })), controller.acknowledge);
   return router;
 }

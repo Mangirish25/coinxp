@@ -2,6 +2,7 @@ import rules from '../gamification/rules.config.js';
 import { createIntegrityRepository } from '../repositories/integrityRepository.js';
 import { httpError } from '../utils/httpError.js';
 import { integrityMessageForCode } from '../gamification/messages.js';
+import { CELEBRATION_CONFIG } from '../config/celebrationConfig.js';
 
 export function createIntegrityService({ db, clock = { now: () => new Date() } }) {
   const repository = createIntegrityRepository(db);
@@ -16,9 +17,15 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
     },
     pendingCelebrations(userId) {
       const result = repository.listNotices(userId, { page: 1, pageSize: 100, unreadOnly: true });
-      const codes = new Set(['LEVEL_UP','DAY_RECAP','STREAK_STARTED','STREAK_MILESTONE','STREAK_MILESTONE_REACHED','STREAK_FREEZE_USED',
-        'STREAK_BROKEN','STREAK_RESTORED','BADGE_UNLOCKED','MISSION_COMPLETED','CHALLENGE_COMPLETED','CHALLENGE_FAILED','PURCHASE_COMPLETED']);
+      const codes = new Set(CELEBRATION_CONFIG.codes);
       return { data: result.data.filter(({ code }) => codes.has(code)) };
+    },
+    claimCelebrations(userId) {
+      const instant = now();
+      const rows = repository.claimCelebrations(userId, instant.toISOString(),
+        new Date(instant.getTime() + CELEBRATION_CONFIG.claimLeaseMs).toISOString(),
+        CELEBRATION_CONFIG.claimBatchSize, CELEBRATION_CONFIG.codes);
+      return { data: rows };
     },
     acknowledge(userId, upToId) { repository.acknowledgeThrough(userId, upToId, now().toISOString()); return { acknowledgedThrough: upToId }; },
     status(userId) {

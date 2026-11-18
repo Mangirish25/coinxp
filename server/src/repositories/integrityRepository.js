@@ -109,6 +109,24 @@ export function createIntegrityRepository(db) {
         VALUES(?,?,?,?,?,?,?)`).run(userId, kind, code, JSON.stringify(data), ledgerEntryId, dedupeKey, createdAt);
       return Number(result.lastInsertRowid) || null;
     },
+    claimCelebrations(userId, now, expiresAt, limit, codes) {
+      if (!codes.length) return [];
+      const placeholders = codes.map(() => '?').join(',');
+      const candidates = db.prepare(`SELECT n.id,n.kind,n.code,n.data_json AS dataJson,n.created_at AS createdAt
+        FROM user_notices n LEFT JOIN celebration_claims c ON c.notice_id=n.id
+        WHERE n.user_id=? AND n.read_at IS NULL AND n.code IN (${placeholders})
+          AND (c.notice_id IS NULL OR c.expires_at<=?) ORDER BY n.id LIMIT ?`);
+      const claim = db.prepare(`INSERT INTO celebration_claims(notice_id,user_id,claimed_at,expires_at) VALUES(?,?,?,?)
+        ON CONFLICT(notice_id) DO UPDATE SET user_id=excluded.user_id,claimed_at=excluded.claimed_at,expires_at=excluded.expires_at
+        WHERE celebration_claims.expires_at<=?`);
+      return db.transaction(() => {
+        const claimed = [];
+        for (const row of candidates.all(userId, ...codes, now, limit)) {
+          if (claim.run(row.id, userId, now, expiresAt, now).changes === 1) claimed.push({ ...row, data: JSON.parse(row.dataJson) });
+        }
+        return claimed;
+      })();
+    },
     listNotices(userId, { page, pageSize, unreadOnly, kind }) {
       const where = ['user_id = ?']; const values = [userId];
       if (unreadOnly) where.push('read_at IS NULL');
@@ -120,8 +138,12 @@ export function createIntegrityRepository(db) {
       return { data: data.map((row) => ({ ...row, data: JSON.parse(row.dataJson) })), total };
     },
     acknowledgeThrough(userId, upToId, readAt) {
-      return db.prepare(`UPDATE user_notices SET read_at = COALESCE(read_at, ?)
+      return db.transaction(() => {
+        const changes = db.prepare(`UPDATE user_notices SET read_at = COALESCE(read_at, ?)
         WHERE user_id = ? AND id <= ?`).run(readAt,userId,upToId).changes;
+        db.prepare('DELETE FROM celebration_claims WHERE user_id=? AND notice_id<=?').run(userId,upToId);
+        return changes;
+      })();
     },
     unreadCount(userId) { return db.prepare('SELECT count(*) AS count FROM user_notices WHERE user_id=? AND read_at IS NULL').get(userId).count; },
     activeHold(userId, now) {

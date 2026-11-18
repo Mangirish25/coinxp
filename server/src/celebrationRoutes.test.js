@@ -32,4 +32,15 @@ describe('NOT-005 celebration notice routes', () => {
     expect(db.prepare('SELECT read_at AS readAt FROM user_notices WHERE id=?').get(noticeId).readAt).not.toBeNull();
     expect((await request(app).get('/api/celebrations/pending').set('Cookie', cookie).expect(200)).body.data).toHaveLength(0);
   });
+
+  it('NOT-005: claims unread celebrations for only one active client at a time', async () => {
+    const first = await request(app).post('/api/celebrations/claim').set('Cookie', cookie).send({}).expect(200);
+    expect(first.body.data).toEqual([expect.objectContaining({ id: noticeId, data: expect.objectContaining({ slug: 'first_step' }) })]);
+    const secondDevice = await request(app).post('/api/celebrations/claim').set('Cookie', cookie).send({}).expect(200);
+    expect(secondDevice.body.data).toEqual([]);
+    const stranger = await request(app).post('/api/auth/register').send({ email: 'claim-stranger@example.com', password: 'securepass1', displayName: 'Other User' }).expect(201);
+    const strangerCookie = stranger.headers['set-cookie'][0].split(';')[0];
+    const otherUser = await request(app).post('/api/celebrations/claim').set('Cookie', strangerCookie).send({}).expect(200);
+    expect(otherUser.body.data).toEqual([]);
+  });
 });

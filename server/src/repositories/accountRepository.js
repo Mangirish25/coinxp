@@ -1,5 +1,5 @@
 const ownedTables = [
-  'account_deletions','activity_backfill_runs','activity_items','badge_progress','badge_repeatable_periods','budget_history','budgets',
+  'account_deletions','activity_backfill_runs','activity_items','badge_progress','badge_repeatable_periods','budget_history','budgets','celebration_claims',
   'case_actions','challenge_days','challenge_runs','daily_reviews','domain_events','entitlement_locks','freeze_ledger','gamification_flags',
   'integrity_cases','notification_preferences','purchases','request_idempotency','reward_holds','settlements',
   'streak_milestones','streak_periods','streak_runs','streak_state','timezone_changes','transaction_audit','transactions',

@@ -34,10 +34,6 @@ function isTyping() {
 
 export function CelebrationHost({ userId }: { userId: number | null }) {
   const { preferences: uiPreferences } = useMotionPreferences();
-  const pending = useQuery({ queryKey: ['celebrations', 'pending', userId], queryFn: celebrationApi.pending,
-    enabled: userId !== null, refetchInterval: () => document.visibilityState === 'visible' ? celebration.pollMsVisible : false,
-    refetchOnWindowFocus: true });
-  const preferences = useQuery({ queryKey: ['notifications', 'preferences', userId], queryFn: activityApi.preferences, enabled: userId !== null });
   const seen = useRef(new Set<number>());
   const dialog = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<PlannedCelebration[]>([]);
@@ -45,6 +41,11 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
   const [showRecap, setShowRecap] = useState(false);
   const [canSkip, setCanSkip] = useState(false);
   const [suspended, setSuspended] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'visible' || isTyping());
+  const pending = useQuery({ queryKey: ['celebrations', 'claim', userId], queryFn: celebrationApi.claim,
+    enabled: userId !== null && items.length === 0 && !showRecap && !suspended,
+    refetchInterval: () => items.length === 0 && !showRecap && !suspended && document.visibilityState === 'visible' ? celebration.pollMsVisible : false,
+    refetchOnWindowFocus: true });
+  const preferences = useQuery({ queryKey: ['notifications', 'preferences', userId], queryFn: activityApi.preferences, enabled: userId !== null });
 
   useEffect(() => {
     const update = () => setSuspended(document.visibilityState !== 'visible' || isTyping());
