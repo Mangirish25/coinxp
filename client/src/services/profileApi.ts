@@ -10,6 +10,10 @@ export const profileApi = {
     return apiFetch<ProfileData>('/api/profile/showcase', { method: 'POST', body: JSON.stringify({ slugs }) }).then((result) => { refresh(); return result; });
   },
   equip(slot: 'THEME' | 'FRAME', itemSlug: string | null) {
-    return apiFetch<ProfileData>('/api/profile/equip', { method: 'POST', body: JSON.stringify({ slot, itemSlug }) }).then((result) => { refresh(); return result; });
+    return apiFetch<ProfileData>('/api/profile/equip', { method: 'POST', body: JSON.stringify({ slot, itemSlug }) }).then((result) => {
+      refresh();
+      if(slot==='THEME'&&typeof window!=='undefined')window.dispatchEvent(new CustomEvent('coinxp:theme-change',{detail:itemSlug}));
+      return result;
+    });
   },
 };

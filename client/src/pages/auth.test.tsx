@@ -109,6 +109,7 @@ describe('authentication routes and forms', () => {
       .fn()
       .mockResolvedValueOnce(unauthenticatedResponse())
       .mockResolvedValueOnce(response(201))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ equippedTheme:null }), { status:200, headers:{'Content-Type':'application/json'} }))
       .mockResolvedValueOnce(response(200));
     vi.stubGlobal('fetch', fetchMock);
 

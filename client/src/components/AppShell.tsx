@@ -4,6 +4,15 @@ import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards, Sparkle
 import { useAuth } from '../contexts/AuthContext';
 import { GamificationToastHost } from './GamificationToastHost';
 import { IntegrityNoticeCenter } from './IntegrityNoticeCenter';
+import { profileApi } from '../services/profileApi';
+import { themeTokens, type ThemeKey } from '../themeTokens';
+
+function applyTheme(slug: string | null | undefined) {
+  const key = (slug && slug in themeTokens ? slug : 'default') as ThemeKey;
+  const tokens = themeTokens[key];
+  document.body.dataset.theme = key;
+  for (const [name,value] of Object.entries(tokens)) document.body.style.setProperty(`--coinxp-${name.replace(/([a-z])([0-9])/g,'$1-$2')}`,value);
+}
 
 const links = [
   { to: '/', label: 'Home', icon: Activity },
@@ -26,6 +35,14 @@ export function AppShell() {
   const [timezone, setTimezone] = useState(user?.timezone ?? 'Asia/Kolkata');
   const [timezoneMessage, setTimezoneMessage] = useState('');
   useEffect(() => { if (user?.timezone) setTimezone(user.timezone); }, [user?.timezone]);
+  useEffect(() => {
+    let active=true;
+    const changed=(event:Event)=>applyTheme((event as CustomEvent<string|null>).detail);
+    window.addEventListener('coinxp:theme-change',changed);
+    if(user) void profileApi.get().then((profile)=>{if(active)applyTheme(profile.equippedTheme);}).catch(()=>{if(active)applyTheme(null);});
+    else applyTheme(null);
+    return ()=>{active=false;window.removeEventListener('coinxp:theme-change',changed);};
+  },[user?.id]);
 
   async function handleLogout() {
     await logout().catch(() => undefined);

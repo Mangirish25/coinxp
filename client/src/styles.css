@@ -12,6 +12,10 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
+body[data-theme] .bg-white { background-color: var(--coinxp-surface, #fff) !important; }
+body[data-theme="theme_midnight"] .border { border-color: #3b4a61; }
+body[data-theme="theme_forest"] .border { border-color: #c5e1cb; }
+body[data-theme="theme_sunrise"] .border { border-color: #fed7aa; }
 button,
 a {
   -webkit-tap-highlight-color: transparent;
