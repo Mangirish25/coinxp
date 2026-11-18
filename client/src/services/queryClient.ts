@@ -9,4 +9,6 @@ export function invalidateFinancialSummaries() {
   void queryClient.invalidateQueries({ queryKey: ['analytics'] });
   void queryClient.invalidateQueries({ queryKey: ['gamification'] });
   void queryClient.invalidateQueries({ queryKey: ['streaks'] });
+  void queryClient.invalidateQueries({ queryKey: ['badges'] });
+  void queryClient.invalidateQueries({ queryKey: ['missions'] });
 }

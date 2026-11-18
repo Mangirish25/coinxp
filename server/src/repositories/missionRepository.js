@@ -3,7 +3,7 @@ export function createMissionRepository(db) {
     return db.prepare(`SELECT id,user_id AS userId,slot,period_key AS periodKey,template_id AS templateId,status,
       generation_seq AS generationSeq,params_json AS paramsJson,assigned_at AS assignedAt,closed_at AS closedAt,xp_awarded AS xpAwarded
       FROM user_missions WHERE user_id=? AND slot=? AND period_key=? ORDER BY generation_seq DESC`).all(userId, slot, periodKey)
-      .map((row) => ({ ...row, params: JSON.parse(row.paramsJson) }));
+      .map(({ paramsJson, ...row }) => ({ ...row, params: JSON.parse(paramsJson) }));
   }
   return {
     rows,
@@ -27,7 +27,8 @@ export function createMissionRepository(db) {
       const daily = db.prepare(`WITH latest AS (
         SELECT scope,category_id,month,max(id) AS id FROM budget_history WHERE user_id=? AND scope='daily_limit'
           AND (month IS NULL OR month=?) AND created_at<=? GROUP BY scope,category_id,month
-      ) SELECT h.action FROM latest l JOIN budget_history h ON h.id=l.id ORDER BY (h.month IS NULL),h.created_at DESC LIMIT 1`)
+      ) SELECT h.action FROM latest l JOIN budget_history h ON h.id=l.id WHERE h.action IN ('set','update')
+        ORDER BY (h.month IS NULL),h.created_at DESC LIMIT 1`)
         .get(userId, date.slice(0, 7), instant);
       const everCategory = db.prepare("SELECT 1 FROM budget_history WHERE user_id=? AND scope='category_monthly' AND action IN ('set','update') LIMIT 1").get(userId);
       const activeMonthly = db.prepare(`WITH latest AS (
