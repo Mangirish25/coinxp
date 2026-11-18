@@ -33,9 +33,14 @@ a {
 @keyframes flame-settle { from { opacity: .78; } to { opacity: 1; } }
 @keyframes flame-halo { to { transform: rotate(360deg); } }
 @keyframes flame-ember { from { opacity: 0; transform: translateY(8px); } 35% { opacity: .9; } to { opacity: 0; transform: translateY(-8px); } }
+.badge-medallion-motion .badge-orbit { transform-box: fill-box; transform-origin: center; animation: badge-orbit 8s linear infinite; }
+.badge-medallion-sheen { animation: badge-sheen 6s ease-in-out infinite; }
+@keyframes badge-orbit { to { rotate: 360deg; } }
+@keyframes badge-sheen { 0%, 72%, 100% { filter: drop-shadow(0 0 0 transparent); } 84% { filter: drop-shadow(0 0 4px currentColor); } }
 @media (prefers-reduced-motion: reduce) {
   .streak-flame-svg, .streak-flame-animated, .streak-flame-risk, .streak-flame-settling,
-  .streak-flame-halo, .streak-flame-rays, .streak-flame-ember { animation: none !important; }
+  .streak-flame-halo, .streak-flame-rays, .streak-flame-ember, .badge-medallion-motion,
+  .badge-medallion-sheen, .badge-orbit { animation: none !important; }
 }
 
 @media print {

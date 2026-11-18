@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { BadgesPage } from './BadgesPage';
@@ -19,6 +19,9 @@ describe('BadgesPage', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'First Step' })).toBeTruthy());
     expect(screen.getByText('2 hidden badges remain undiscovered.')).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Steady Tracker next tier' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /View First Step, Bronze, common/ }));
+    expect(await screen.findByRole('dialog', { name: 'First Step badge details' })).toBeTruthy();
+    expect(screen.getAllByRole('img', { name: 'First Step, Bronze, common' }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/comeback|fresh start/i)).toBeNull();
   });
 });

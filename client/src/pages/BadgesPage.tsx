@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Award, LockKeyhole } from 'lucide-react';
+import { Award, LockKeyhole, X } from 'lucide-react';
 import { badgeApi } from '../services/badgeApi';
 import type { BadgeFamily } from '../types/rewards';
+import { BadgeMedallion } from '../visuals/medallion/BadgeMedallion';
 
 const categoryLabels: Record<string, string> = {
   TRACKING: 'Tracking', STREAK: 'Consistency', BUDGET: 'Budget habits',
@@ -12,12 +14,12 @@ function titleFor(slug: string) {
   return slug.split('_').map((word) => word[0]?.toUpperCase() + word.slice(1)).join(' ');
 }
 
-function BadgeCard({ badge }: { badge: BadgeFamily }) {
+function BadgeCard({ badge, onSelect }: { badge: BadgeFamily; onSelect: (badge: BadgeFamily) => void }) {
   const earned = badge.tiers.filter(({ status }) => status === 'ACTIVE').length;
   const next = badge.tiers.find(({ status }) => status === 'LOCKED');
   const progress = next ? Math.min(100, Math.floor((badge.metricValue * 100) / next.threshold)) : 100;
   return <article className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
-    <div className="flex items-start gap-3"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${earned ? 'bg-brand-50 text-brand-700' : 'bg-canvas text-ink-500'}`}><Award aria-hidden="true" /></span>
+    <div className="flex items-start gap-3"><BadgeMedallion badge={badge} tier={badge.tiers[0]} size="sm" progressBps={next ? Math.min(10000, Math.floor((badge.metricValue * 10000) / next.threshold)) : 10000} onClick={() => onSelect(badge)} />
       <div className="min-w-0 flex-1"><p className="text-xs font-medium uppercase tracking-wide text-ink-500">{categoryLabels[badge.category] ?? badge.category}</p><h2 className="mt-1 font-semibold">{titleFor(badge.slug)}</h2></div>
       <span className="text-xs text-ink-500">{earned} / {badge.tiers.length} tiers</span>
     </div>
@@ -34,6 +36,20 @@ function BadgeCard({ badge }: { badge: BadgeFamily }) {
 
 export function BadgesPage() {
   const catalog = useQuery({ queryKey: ['badges', 'catalog'], queryFn: badgeApi.catalog });
+  const [selected, setSelected] = useState<BadgeFamily | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (selected && !dialog.open) {
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+    }
+    if (!selected && dialog.open) {
+      if (typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+    }
+  }, [selected]);
   const categories = [...new Set(catalog.data?.data.map(({ category }) => category) ?? [])];
   return <section className="mx-auto max-w-6xl space-y-6">
     <header><p className="text-sm font-medium text-brand-600">Small wins, built over time</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Badges</h1><p className="mt-2 max-w-2xl text-sm text-ink-500">Badges come from recorded habits and settled progress. Earned badges stay in your collection.</p></header>
@@ -42,7 +58,16 @@ export function BadgesPage() {
     {catalog.data && <>
       {catalog.data.hiddenRemaining > 0 && <p className="flex items-center gap-2 rounded-xl border bg-white p-4 text-sm"><LockKeyhole size={16} aria-hidden="true" />{catalog.data.hiddenRemaining} hidden {catalog.data.hiddenRemaining === 1 ? 'badge remains' : 'badges remain'} undiscovered.</p>}
       {catalog.data.data.length === 0 && <p className="rounded-2xl border bg-white p-6 text-sm text-ink-600">Your badge collection will grow as you build steady money habits.</p>}
-      {categories.map((category) => <section key={category} aria-labelledby={`badge-${category}`}><h2 id={`badge-${category}`} className="mb-3 text-lg font-semibold">{categoryLabels[category] ?? category}</h2><div className="grid gap-4 lg:grid-cols-2">{catalog.data?.data.filter((badge) => badge.category === category).map((badge) => <BadgeCard key={badge.slug} badge={badge} />)}</div></section>)}
+      {categories.map((category) => <section key={category} aria-labelledby={`badge-${category}`}><h2 id={`badge-${category}`} className="mb-3 text-lg font-semibold">{categoryLabels[category] ?? category}</h2><div className="grid gap-4 lg:grid-cols-2">{catalog.data?.data.filter((badge) => badge.category === category).map((badge) => <BadgeCard key={badge.slug} badge={badge} onSelect={setSelected} />)}</div></section>)}
     </>}
+    <dialog ref={dialogRef} aria-label={selected ? `${titleFor(selected.slug)} badge details` : 'Badge details'} className="w-[min(94vw,38rem)] rounded-3xl p-0 shadow-2xl backdrop:bg-ink-900/50" onClose={() => setSelected(null)} onCancel={() => setSelected(null)}>
+      {selected && <div className="relative p-6 sm:p-8"><button type="button" autoFocus onClick={() => setSelected(null)} aria-label="Close badge details" className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full hover:bg-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700"><X aria-hidden="true" /></button>
+        <div className="flex flex-col items-center text-center"><BadgeMedallion badge={selected} tier={selected.tiers.find(({ status }) => status === 'ACTIVE') ?? selected.tiers[0]} size="xl" state={selected.tiers.some(({ status }) => status === 'ACTIVE') ? 'UNLOCKED' : 'LOCKED'} />
+          <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-brand-700">{categoryLabels[selected.category] ?? selected.category}</p><h2 className="mt-1 text-2xl font-semibold">{titleFor(selected.slug)}</h2>
+          <p className="mt-2 max-w-md text-sm text-ink-600">Progress comes from verified tracking and settled activity. Badge unlocks stay earned unless reviewed by an administrator.</p>
+        </div>
+        <ol className="mt-6 space-y-2" aria-label={`${titleFor(selected.slug)} tier details`}>{selected.tiers.map((tier) => <li key={tier.tier} className="flex items-center justify-between rounded-xl bg-canvas px-4 py-3 text-sm"><span><BadgeMedallion badge={selected} tier={tier} size="sm" /> <span>{['Bronze', 'Silver', 'Gold', 'Platinum'][tier.tier - 1] ?? `Tier ${tier.tier}`} · {tier.rarity.toLowerCase()}</span></span><span>{tier.status === 'ACTIVE' ? `Earned ${tier.achievedOn ?? ''}` : `${tier.threshold} ${selected.metric.toLowerCase().replaceAll('_', ' ')}`}</span></li>)}</ol>
+      </div>}
+    </dialog>
   </section>;
 }
