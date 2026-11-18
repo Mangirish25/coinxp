@@ -448,6 +448,15 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const envelope=buildEnvelope({eventType,userId,data,occurredAt,localDate:eventDate,timezone:user?.timezone},clock);
     enqueueRow(db,envelope,{status:'PUBLISHED',dedupeKey});
     writeActivity(eventType,userId,data,occurredAt,dedupeKey);
+    const celebrationByEvent = {
+      STREAK_STARTED: { code: 'STREAK_STARTED', data: { date: data.date, runId: data.runId } },
+      STREAK_MILESTONE_REACHED: { code: 'STREAK_MILESTONE', data: { milestone: data.milestone, length: data.milestone, xp: data.xp } },
+      STREAK_FREEZE_USED: { code: 'STREAK_FREEZE_USED', data: { date: data.date, inventoryAfter: data.inventoryAfter, length: data.length } },
+      STREAK_BROKEN: { code: 'STREAK_BROKEN', data: { lengthAtEnd: data.lengthAtEnd, date: data.date, comebackEligibleUntil: data.comebackEligibleUntil } },
+      STREAK_RESTORED: { code: 'STREAK_RESTORED', data: { fromLength: data.fromLength, toLength: data.toLength } },
+    }[eventType];
+    if (celebrationByEvent) integrity.insertNotice({ userId, kind: 'STREAK', code: celebrationByEvent.code,
+      data: celebrationByEvent.data, dedupeKey: `CELEBRATION:${userId}:${dedupeKey}`, createdAt: occurredAt });
     return envelope;
   }
 

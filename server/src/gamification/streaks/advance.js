@@ -68,7 +68,7 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
           freezes.insert({ userId, delta: -1, reason: 'USED', effectiveAt: cutoff, effectiveLocalDate: date,
             periodKey: date, idempotencyKey: `FRZ:USE:${date}`, actor: 'engine', createdAt: iso(clock) });
           const inventoryAfter = freezes.inventoryAsOf(userId, cutoff);
-          gameEngine.publishStreak('STREAK_FREEZE_USED', userId, { streakType: TRACKING, date, inventoryAfter }, `FRZUSE:${userId}:${date}`, cutoff);
+          gameEngine.publishStreak('STREAK_FREEZE_USED', userId, { streakType: TRACKING, date, inventoryAfter, length: state.currentLength }, `FRZUSE:${userId}:${date}`, cutoff);
           const usedSince = new Date(clock.now().getTime() - config.streaks.antiAbuse.freezeUsedWindowDays * config.units.hoursPerDay *
             config.units.minutesPerHour * config.units.secondsPerMinute * config.units.millisecondsPerSecond).toISOString();
           const recentUses = freezes.countUsedSince(userId, usedSince);

@@ -55,5 +55,8 @@ describe('Part 7 streak API', () => {
     expect(results.every((result) => result.body.tracking.current === 3)).toBe(true);
     expect(db.prepare("SELECT count(*) AS count FROM streak_periods WHERE user_id=? AND streak_type='TRACKING_DAILY' AND status='COUNTED'").get(userId).count).toBe(3);
     expect(db.prepare("SELECT count(*) AS count FROM xp_ledger WHERE user_id=? AND rule_id='STR-006'").get(userId).count).toBe(1);
+    const milestone = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=? AND code='STREAK_MILESTONE'").get(userId);
+    expect(JSON.parse(milestone.dataJson)).toMatchObject({ milestone: 3, length: 3, xp: 10 });
+    expect(db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=? AND code='STREAK_MILESTONE'").get(userId).count).toBe(1);
   });
 });
