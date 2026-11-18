@@ -1,3 +1,5 @@
+import { badgeTier } from '../rewards/catalog.js';
+
 function safeXp(value, name) {
   if (!Number.isSafeInteger(value) || value < 0)
     throw new TypeError(`${name} must be a non-negative safe integer.`);
@@ -18,7 +20,18 @@ export function theoreticalMaximum({ settledDays, closedWeeks, closedMonths }, c
   const milestoneXp = milestones
     .filter(({ days }) => days <= settledDays)
     .reduce((sum, { xp: amount }) => sum + BigInt(amount), 0n);
-  const total = onboarding + daily + weekly + monthly + milestoneXp;
+  const rewardBadges = config.rewards.badges.reduce((totalXp, family) => {
+    if (family.type === 'PROGRESSIVE') {
+      return totalXp + family.tiers.reduce((familyXp, _threshold, index) =>
+        familyXp + BigInt(badgeTier(config.rewards, family, index + 1).xp), 0n);
+    }
+    return totalXp + BigInt(badgeTier(config.rewards, family, 1).xp);
+  }, 0n);
+  const missions = BigInt(config.rewards.missions.xp.DAILY) * safeXp(settledDays, 'settledDays') +
+    BigInt(config.rewards.missions.xp.WEEKLY) * safeXp(closedWeeks, 'closedWeeks') +
+    BigInt(config.rewards.missions.xp.MONTHLY) * safeXp(closedMonths, 'closedMonths');
+  const challenges = config.rewards.challenges.library.reduce((sum, challenge) => sum + BigInt(challenge.rewardXp), 0n);
+  const total = onboarding + daily + weekly + monthly + milestoneXp + rewardBadges + missions + challenges;
   if (total > BigInt(Number.MAX_SAFE_INTEGER))
     throw new RangeError('Theoretical XP ceiling exceeds the safe integer range.');
   return Number(total);

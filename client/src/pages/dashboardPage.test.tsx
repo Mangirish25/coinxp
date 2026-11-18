@@ -142,7 +142,10 @@ describe('DashboardPage states', () => {
   it('keeps other dashboard sections visible when one query fails', async () => {
     setup(true);
     await waitFor(() => expect(screen.getByText('Total balance')).toBeTruthy());
-    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy(), { timeout: 3000 });
+    await waitFor(() => {
+      const categorySection = screen.getByText('Spending by category').closest('section');
+      expect(categorySection?.querySelector('[role="alert"]')).toBeTruthy();
+    }, { timeout: 3000 });
     expect(screen.getByText('Recent transactions')).toBeTruthy();
   });
 });

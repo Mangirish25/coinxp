@@ -39,7 +39,7 @@ describe('Part 6 XP engine', () => {
 
   it('ABU-013: computes the configured theoretical XP ceiling with integer arithmetic', () => {
     const maximum=theoreticalMaximum({settledDays:100,closedWeeks:14,closedMonths:3},rules);
-    expect(maximum).toBe(6160);
+    expect(maximum).toBe(9210);
     expect(checkTheoreticalCeiling({lifetimeXp:maximum+1,positiveAdjustmentXp:0,theoreticalMaxXp:maximum}).exceeded).toBe(true);
     expect(checkTheoreticalCeiling({lifetimeXp:maximum+100,positiveAdjustmentXp:100,theoreticalMaxXp:maximum}).exceeded).toBe(false);
   });
