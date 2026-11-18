@@ -55,4 +55,14 @@ describe('USR-008 account deletion grace, restore and erasure', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM user_progress WHERE user_id=?').get(account.user.id).n).toBe(0);
     expect(db.prepare("SELECT COUNT(*) AS n FROM categories WHERE user_id IS NULL AND name='Food'").get().n).toBe(1);
   });
+
+  it('does not restore an account after its deletion deadline', async () => {
+    const account = await register('expired@example.com');
+    await request(app).delete('/api/account').set('Cookie', account.cookie).send({ password }).expect(202);
+    clock.advance(30 * 24 * 60 * 60 * 1000);
+    const login = await request(app).post('/api/auth/login').send({ email: 'expired@example.com', password }).expect(423);
+    const recoveryCookie = login.headers['set-cookie'][0].split(';')[0];
+    await request(app).post('/api/account/restore').set('Cookie', recoveryCookie).send({})
+      .expect(410, { error: { code: 'DELETION_EXPIRED', message: 'The account deletion period has ended. This account can no longer be restored.' } });
+  });
 });
