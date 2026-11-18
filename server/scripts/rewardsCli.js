@@ -4,6 +4,8 @@ import { migrateDatabase } from '../src/db/migrator.js';
 import { createGamificationEngine } from '../src/gamification/engine.js';
 import { createBadgeAdminService } from '../src/services/badgeAdminService.js';
 import { createShopAdminService } from '../src/services/shopAdminService.js';
+import rules from '../src/gamification/rules.config.js';
+import { economyReport } from '../src/gamification/rewards/catalog.js';
 
 const [area,command,...args]=process.argv.slice(2);
 const option=(name)=>{const index=args.indexOf(`--${name}`);return index<0?null:args[index+1]??null;};
@@ -42,5 +44,7 @@ try {
     const actor=option('actor');const note=option('note');
     if(!Number.isSafeInteger(purchaseId)||purchaseId<1||!actor||!note||note.trim().length<10)throw new Error('Usage: shop refund <purchaseId> --actor <name> --note <text of at least 10 characters> [--apply]');
     print(shopAdmin.refund(purchaseId,{actor,note:note.trim()},{apply}));
-  } else throw new Error('Usage: rewardsCli.js badges <backfill|revoke> ... | shop refund <purchaseId> ... [--apply]');
+  } else if(area==='economy'&&command==='report'){
+    const report=economyReport(rules);print(report);if(!report.passes)process.exitCode=1;
+  } else throw new Error('Usage: rewardsCli.js badges <backfill|revoke> ... | shop refund <purchaseId> ... | economy report');
 } finally { db.close(); }

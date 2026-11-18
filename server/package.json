@@ -18,6 +18,7 @@
     "gamification:requeue-dead": "node scripts/gamificationCli.js requeue-dead",
     "integrity": "node scripts/integrityCli.js",
     "rewards": "node scripts/rewardsCli.js",
+    "rewards:economy-report": "node scripts/rewardsCli.js economy report",
     "db:reset": "node src/db/reset.js"
   },
   "dependencies": {

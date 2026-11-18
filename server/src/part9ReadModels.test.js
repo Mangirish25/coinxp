@@ -15,10 +15,12 @@ describe('Part 9 activity and notification preferences', () => {
   afterEach(()=>db.close());
   it('EVT-012: activity cursor paging is private and stable',async()=>{
     for(let i=1;i<=3;i++) db.prepare(`INSERT INTO activity_items(user_id,kind,occurred_at,summary_code,data_json,dedupe_key) VALUES(1,'BADGE',?,'BADGE_UNLOCKED','{}',?)`).run(`2026-11-0${i}T00:00:00.000Z`,`feed-${i}`);
-    const first=await request(app).get('/api/activity?pageSize=2').set('Cookie',cookie).expect(200);
+    db.prepare(`INSERT INTO activity_items(user_id,kind,occurred_at,summary_code,data_json,dedupe_key) VALUES(1,'MISSION','2026-11-04T00:00:00.000Z','MISSION_COMPLETED','{}','mission-feed')`).run();
+    const first=await request(app).get('/api/activity?pageSize=2&kinds=BADGE').set('Cookie',cookie).expect(200);
     expect(first.body.data).toHaveLength(2); expect(first.body.nextCursor).toBeTruthy();
-    const second=await request(app).get(`/api/activity?pageSize=2&cursor=${first.body.nextCursor}`).set('Cookie',cookie).expect(200);
+    const second=await request(app).get(`/api/activity?pageSize=2&kinds=BADGE&cursor=${first.body.nextCursor}`).set('Cookie',cookie).expect(200);
     expect(second.body.data).toHaveLength(1); expect(second.body.data[0].id).not.toBe(first.body.data[0].id);
+    expect((await request(app).get('/api/activity?kinds=MISSION').set('Cookie',cookie).expect(200)).body.data).toHaveLength(1);
     await request(app).get('/api/activity?cursor=bad').set('Cookie',cookie).expect(400);
   });
   it('NOT-004: mutable preferences save, locked categories stay enabled, and writes are owner-scoped',async()=>{

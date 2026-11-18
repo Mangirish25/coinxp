@@ -14,7 +14,7 @@ export function createActivityRoutes({ db, env }) {
     try { if (req.validatedQuery.cursor) beforeId = JSON.parse(Buffer.from(req.validatedQuery.cursor,'base64url').toString()); }
     catch { return next(httpError(400,'INVALID_CURSOR','The activity cursor is invalid.')); }
     if (beforeId && (!Number.isSafeInteger(beforeId.id) || typeof beforeId.occurredAt !== 'string')) return next(httpError(400,'INVALID_CURSOR','The activity cursor is invalid.'));
-    req.validatedQuery = { limit: req.validatedQuery.pageSize, beforeId, kind: req.validatedQuery.kind ?? null };
+    req.validatedQuery = { limit: req.validatedQuery.pageSize, beforeId, kinds: req.validatedQuery.kinds };
     controller.list(req,res,next);
   });
   return router;

@@ -1,9 +1,9 @@
 export function createActivityRepository(db) {
   return {
-    list(userId, { limit, beforeId, kind }) {
+    list(userId, { limit, beforeId, kinds }) {
       const where = ['user_id = ?']; const values = [userId];
       if (beforeId) { where.push('(occurred_at < ? OR (occurred_at = ? AND id < ?))'); values.push(beforeId.occurredAt,beforeId.occurredAt,beforeId.id); }
-      if (kind) { where.push('kind = ?'); values.push(kind); }
+      if (kinds?.length) { where.push(`kind IN (${kinds.map(()=>'?').join(',')})`); values.push(...kinds); }
       values.push(limit + 1);
       const rows = db.prepare(`SELECT id,kind,ref_type AS refType,ref_id AS refId,occurred_at AS occurredAt,
         summary_code AS summaryCode,data_json AS dataJson FROM activity_items WHERE ${where.join(' AND ')}
