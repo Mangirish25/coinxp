@@ -38,6 +38,9 @@ describe('NOT-005 celebration notice routes', () => {
     expect(first.body.data).toEqual([expect.objectContaining({ id: noticeId, data: expect.objectContaining({ slug: 'first_step' }) })]);
     const secondDevice = await request(app).post('/api/celebrations/claim').set('Cookie', cookie).send({}).expect(200);
     expect(secondDevice.body.data).toEqual([]);
+    db.prepare('UPDATE celebration_claims SET expires_at=? WHERE notice_id=?').run('2000-01-01T00:00:00.000Z', noticeId);
+    const recovered = await request(app).post('/api/celebrations/claim').set('Cookie', cookie).send({}).expect(200);
+    expect(recovered.body.data.map(({ id }) => id)).toEqual([noticeId]);
     const stranger = await request(app).post('/api/auth/register').send({ email: 'claim-stranger@example.com', password: 'securepass1', displayName: 'Other User' }).expect(201);
     const strangerCookie = stranger.headers['set-cookie'][0].split(';')[0];
     const otherUser = await request(app).post('/api/celebrations/claim').set('Cookie', strangerCookie).send({}).expect(200);

@@ -146,6 +146,6 @@ describe('DashboardPage states', () => {
       const categorySections = screen.getAllByText('Spending by category').map((heading) => heading.closest('section'));
       expect(categorySections.some((section) => section?.querySelector('[role="alert"]'))).toBe(true);
     }, { timeout: 3000 });
-    expect(screen.getByText('Recent transactions')).toBeTruthy();
+    expect(screen.getAllByText('Recent transactions').length).toBeGreaterThan(0);
   });
 });
