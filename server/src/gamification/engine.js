@@ -2,6 +2,7 @@ import { createOutboxRepository, buildEnvelope, enqueue as enqueueRow } from './
 import { createLedgerRepository } from './ledger/ledgerRepository.js';
 import { createGamificationFactsRepository } from './ledger/factsRepository.js';
 import { createSettlementRepository } from './settlement/settlementRepository.js';
+import { createStreakRepository } from './streaks/streakRepository.js';
 import { localDateAt, shiftDate, weekKey, weekBounds, monthOf, monthStart, monthEnd, localInstantToUtc, weekDateRange } from './dateMath.js';
 import { derivedLevel, titleForLevel, levelProgress, levelUpsBetween } from './levels.js';
 import { messageForReason } from './messages.js';
@@ -50,6 +51,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   const ledger=createLedgerRepository(db);
   const facts=createGamificationFactsRepository(db);
   const settlements=createSettlementRepository(db);
+  const streaks=createStreakRepository(db);
   const transactions=createTransactionRepository(db);
   const budgetHistory=createBudgetHistoryRepository(db);
   const integrity=createIntegrityRepository(db);
@@ -814,6 +816,31 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   function requeueDead(userId=null){return outbox.requeueDead(userId);}
   function listFlags(userId){return ledger.listFlags(userId);}
 
+  function advanceRewards(userId) {
+    const hold=(id,now)=>integrity.hasActiveHoldForScope(id,'OUTCOME_XP',now);
+    const challengeResults=challenges.advance(userId,closeThrough(userId),hold);
+    const missionResults=missions.advance(userId,closeThrough(userId),hold);
+    missions.current(userId);
+    const results=[...challengeResults,...missionResults,...missions.releaseDeferred(userId),...badges.releaseDeferred(userId),...badges.evaluate(userId)];
+    const through=closeThrough(userId);
+    const from=shiftDate(through,-config.settlement.sealAfterDays);
+    const days=settlements.list(userId,'day',from,through);
+    for(const day of days) {
+      const status=streaks.period(userId,'TRACKING_DAILY',day.periodKey)?.status??'NONE';
+      const previousDate=shiftDate(day.periodKey,-config.units.one);
+      const previousStatus=streaks.period(userId,'TRACKING_DAILY',previousDate)?.status??'NONE';
+      const streakBefore=streaks.lengthAt(userId,'TRACKING_DAILY',previousDate);
+      const streakAfter=streaks.lengthAt(userId,'TRACKING_DAILY',day.periodKey);
+      const xpEntries=ledger.dayEntries(userId,day.periodKey);
+      const xpDelta=xpEntries.reduce((total,entry)=>total+entry.delta,config.units.zero);
+      if(!xpEntries.length&&streakBefore===streakAfter&&previousStatus===status)continue;
+      integrity.insertNotice({userId,kind:'PROGRESS',code:'DAY_RECAP',data:{date:day.periodKey,xpDelta,
+        entries:xpEntries.map(({ruleId,delta,reasonCode})=>({ruleId,delta,reasonCode})),streakBefore,streakAfter,streakStatus:status},
+        dedupeKey:`RECAP:${userId}:${day.periodKey}`,createdAt:day.settledAt});
+    }
+    return results;
+  }
+
   function clientRules() {
     const safeRules = Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'integrity'));
     return { configVersion: CONFIG_VERSION, ...safeRules };
@@ -821,7 +848,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
-    advanceRewards:(userId)=>{ const hold=(id,now)=>integrity.hasActiveHoldForScope(id,'OUTCOME_XP',now); const challengeResults=challenges.advance(userId,closeThrough(userId),hold); const missionResults=missions.advance(userId,closeThrough(userId),hold); missions.current(userId); return [...challengeResults,...missionResults,...missions.releaseDeferred(userId),...badges.releaseDeferred(userId),...badges.evaluate(userId)]; },
+    advanceRewards,
     badgeCatalog:(userId)=>badges.catalog(userId), evaluateBadges:(userId,slug=null,options={})=>badges.evaluate(userId,config.rewards.badges.filter((family)=>!slug||family.slug===slug),options),
     reconcileBadge:({userId,slug,tier,desired,reasonCode,note})=>reconcileKey({userId,key:`BAD-003:${slug}:${tier}`,ruleId:'BAD-003',periodType:'once',periodKey:`BAD-003:${slug}:${tier}`,desired,value:rewards.badge(userId,slug,tier)?.xpAwarded??0,reasonCode,note}),
     lockBadge:(userId,slug,tier,at,caseId)=>ledger.lockEntitlement(userId,`BAD-003:${slug}:${tier}`,'ADMIN',at,caseId),

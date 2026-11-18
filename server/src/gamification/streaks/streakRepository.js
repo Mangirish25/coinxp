@@ -60,6 +60,15 @@ export function createStreakRepository(db) {
         reason_code AS reasonCode,processed_at AS processedAt FROM streak_periods WHERE user_id=? AND streak_type=? AND period_key=?`)
         .get(userId, streakType, periodKey);
     },
+    lengthAt(userId, streakType, periodKey) {
+      const period = this.period(userId, streakType, periodKey);
+      if (!period?.runId || !['COUNTED', 'FROZEN'].includes(period.status)) return 0;
+      const run = db.prepare('SELECT length_offset AS lengthOffset FROM streak_runs WHERE id=? AND user_id=?').get(period.runId, userId);
+      if (!run) return 0;
+      const counted = db.prepare(`SELECT count(*) AS count FROM streak_periods WHERE user_id=? AND streak_type=? AND run_id=?
+        AND period_key<=? AND status='COUNTED'`).get(userId, streakType, period.runId, periodKey).count;
+      return Math.max(0, Number(run.lengthOffset) + Number(counted));
+    },
     periods(userId, streakType, from, to) {
       return db.prepare(`SELECT period_key AS periodKey,status,reason_code AS reasonCode,processed_at AS processedAt
         FROM streak_periods WHERE user_id=? AND streak_type=? AND period_key>=? AND period_key<=? ORDER BY period_key`)

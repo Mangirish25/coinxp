@@ -58,5 +58,10 @@ describe('Part 7 streak API', () => {
     const milestone = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=? AND code='STREAK_MILESTONE'").get(userId);
     expect(JSON.parse(milestone.dataJson)).toMatchObject({ milestone: 3, length: 3, xp: 10 });
     expect(db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=? AND code='STREAK_MILESTONE'").get(userId).count).toBe(1);
+    app.locals.gameEngine.advanceRewards(userId);
+    const recap = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=? AND code='DAY_RECAP' AND data_json LIKE '%2026-11-12%' ").get(userId);
+    expect(JSON.parse(recap.dataJson)).toMatchObject({ date: '2026-11-12', xpDelta: 10, streakBefore: 2, streakAfter: 3, streakStatus: 'COUNTED', entries: [{ ruleId: 'STR-006', delta: 10 }] });
+    app.locals.gameEngine.advanceRewards(userId);
+    expect(db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=? AND code='DAY_RECAP'").get(userId).count).toBe(3);
   });
 });

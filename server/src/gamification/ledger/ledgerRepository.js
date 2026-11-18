@@ -80,6 +80,11 @@ export function createLedgerRepository(db) {
         .map((row)=>numeric(row,['id','transitionNo','lifetimeDelta','balanceDelta','reversesEntryId']));
       return {rows,total};
     },
+    dayEntries(userId, date) {
+      return db.prepare(`SELECT rule_id AS ruleId,lifetime_delta AS delta,reason_code AS reasonCode FROM xp_ledger
+        WHERE user_id=? AND ((period_type='day' AND period_key=?) OR (rule_id='STR-006' AND note LIKE ?)) ORDER BY id`).safeIntegers().all(userId, date, `${date};%`)
+        .map((row)=>numeric(row,['delta']));
+    },
     lastEntries(userId, limit) {
       return db.prepare(`SELECT id,entry_type AS entryType,rule_id AS ruleId,entitlement_key AS entitlementKey,transition_no AS transitionNo,
         lifetime_delta AS lifetimeDelta,balance_delta AS balanceDelta,period_type AS periodType,period_key AS periodKey,
