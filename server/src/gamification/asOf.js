@@ -27,7 +27,8 @@ export function transactionFactsAsOf(auditRows, from, to, instant, minimumPaise)
     const record=row.after;
     if(record.transactionDate<from||record.transactionDate>to)continue;
     const live=record.deletedAt==null&&record.createdLocalDate===record.transactionDate&&record.amountPaise>=minimumPaise;
-    facts.push({transactionId:row.transactionId,type:record.type,amountPaise:record.amountPaise,transactionDate:record.transactionDate,live,isUnexpected:Boolean(record.isUnexpected)});
+    facts.push({transactionId:row.transactionId,type:record.type,amountPaise:record.amountPaise,transactionDate:record.transactionDate,
+      categoryId:record.categoryId??null,description:record.description??null,live,isUnexpected:Boolean(record.isUnexpected)});
   }
   return facts;
 }

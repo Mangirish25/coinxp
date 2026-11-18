@@ -8,6 +8,49 @@ export function createMissionRepository(db) {
   return {
     transaction(work) { return db.transaction(work)(); },
     rows,
+    closeCandidates(userId) {
+      return db.prepare("SELECT id,user_id AS userId,slot,period_key AS periodKey,template_id AS templateId,status,generation_seq AS generationSeq,params_json AS paramsJson,assigned_at AS assignedAt,closed_at AS closedAt,xp_awarded AS xpAwarded FROM user_missions WHERE user_id=? AND status IN ('ASSIGNED','DEFERRED') ORDER BY period_key,slot,id")
+        .all(userId).map(({ paramsJson, ...row }) => ({ ...row, params: JSON.parse(paramsJson) }));
+    },
+    closeMission(userId, id, status, closedAt, xpAwarded = 0) {
+      return db.prepare("UPDATE user_missions SET status=?,closed_at=?,xp_awarded=? WHERE id=? AND user_id=? AND status IN ('ASSIGNED','DEFERRED')")
+        .run(status, closedAt, xpAwarded, id, userId).changes > 0;
+    },
+    completedUnpaid(userId) {
+      return db.prepare("SELECT id,slot FROM user_missions WHERE user_id=? AND status='COMPLETED' AND xp_awarded=0 ORDER BY id").all(userId);
+    },
+    setMissionXp(userId, id, xp) {
+      return db.prepare("UPDATE user_missions SET xp_awarded=? WHERE id=? AND user_id=? AND status='COMPLETED' AND xp_awarded=0").run(xp, id, userId).changes > 0;
+    },
+    insertActivity({ userId, refId, occurredAt, data }) {
+      return db.prepare(`INSERT OR IGNORE INTO activity_items(user_id,kind,ref_type,ref_id,occurred_at,summary_code,data_json,dedupe_key)
+        VALUES(?,'MISSION','MISSION',?,?,'MISSION_COMPLETED',?,?)`).run(userId,String(refId),occurredAt,JSON.stringify(data),`MISSION:${refId}:COMPLETED`).changes > 0;
+    },
+    periodFacts(userId, from, to, cutoff) {
+      const tracked = db.prepare(`SELECT period_key AS date,details_json AS detailsJson FROM settlements WHERE user_id=? AND period_type='day'
+        AND period_key>=? AND period_key<=? AND json_extract(details_json,'$.xpTracked')=1 ORDER BY period_key`).all(userId,from,to)
+        .map(({ date, detailsJson }) => ({ date, details: JSON.parse(detailsJson) }));
+      const countedBudgetDays = db.prepare(`SELECT s.period_key AS date FROM settlements s WHERE s.user_id=? AND s.period_type='day'
+        AND s.period_key>=? AND s.period_key<=? AND s.outcome='PASS' AND EXISTS(SELECT 1 FROM xp_ledger l WHERE l.user_id=s.user_id
+          AND l.entitlement_key='XP-003:'||s.period_key AND l.transition_no=(SELECT max(ll.transition_no) FROM xp_ledger ll WHERE ll.user_id=l.user_id AND ll.entitlement_key=l.entitlement_key)
+          AND l.entry_type IN ('AWARD','REINSTATE')) ORDER BY s.period_key`).all(userId,from,to).map(({ date }) => date);
+      const reviews = db.prepare(`SELECT local_date AS date FROM daily_reviews WHERE user_id=? AND local_date>=? AND local_date<=? AND xp_eligible=1 ORDER BY local_date`)
+        .all(userId,from,to).map(({ date }) => date);
+      const budgetHistory = db.prepare(`SELECT scope,category_id AS categoryId,month,action,new_amount_paise AS newAmountPaise,created_at AS createdAt
+        FROM budget_history WHERE user_id=? AND created_at<=? ORDER BY created_at,id`).safeIntegers().all(userId,cutoff)
+        .map(({ newAmountPaise, ...row }) => ({ ...row, newAmountPaise: newAmountPaise === null ? null : Number(newAmountPaise) }));
+      const auditRows = db.prepare(`SELECT a.transaction_id AS transactionId,a.action,a.before_json AS beforeJson,a.after_json AS afterJson,a.created_at AS createdAt,a.id
+        FROM transaction_audit a JOIN transactions t ON t.id=a.transaction_id WHERE a.user_id=? AND t.user_id=? AND a.created_at<=? ORDER BY a.transaction_id,a.created_at,a.id`)
+        .all(userId,userId,cutoff).map((row) => ({ ...row, before: row.beforeJson === null ? null : JSON.parse(row.beforeJson), after: row.afterJson === null ? null : JSON.parse(row.afterJson) }));
+      const categories = db.prepare('SELECT id,name FROM categories WHERE user_id IS NULL OR user_id=?').all(userId).map(({ id, name }) => ({ id: Number(id), name }));
+      return { tracked, countedBudgetDays, reviews, budgetHistory, auditRows, categories };
+    },
+    countedBudgetDayCount(userId, from, to) {
+      return db.prepare(`SELECT count(*) AS count FROM settlements s WHERE s.user_id=? AND s.period_type='day' AND s.period_key>=? AND s.period_key<=?
+        AND s.outcome='PASS' AND EXISTS(SELECT 1 FROM xp_ledger l WHERE l.user_id=s.user_id AND l.entitlement_key='XP-003:'||s.period_key
+          AND l.transition_no=(SELECT max(ll.transition_no) FROM xp_ledger ll WHERE ll.user_id=l.user_id AND ll.entitlement_key=l.entitlement_key)
+          AND l.entry_type IN ('AWARD','REINSTATE'))`).get(userId,from,to).count;
+    },
     replaceAssigned(userId, id) {
       return db.prepare("UPDATE user_missions SET status='REPLACED' WHERE id=? AND user_id=? AND status='ASSIGNED'").run(id, userId).changes > 0;
     },

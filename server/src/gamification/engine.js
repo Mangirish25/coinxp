@@ -60,7 +60,8 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const user=facts.user(userId); if(!user)throw httpError(401,'UNAUTHENTICATED','Please sign in to continue.');
     return localDateAt(instant,user.timezone);
   }
-  const missions = createMissionService({ repository: missionRepository, facts, config, clock, localDate });
+  const missions = createMissionService({ repository: missionRepository, facts, config, clock, localDate, reconcileKey, publish,
+    insertNotice: (notice) => integrity.insertNotice(notice) });
   function enqueue(event){
     if(!enabled)return null;
     const envelope=buildEnvelope(event,clock);
@@ -653,7 +654,9 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     const from = shiftDate(today,-config.settlement.sealAfterDays);
     const reconciled = reconcileRange(userId,from,today);
     const releasedBadges = badges.releaseDeferred(userId);
-    return { expired: expired.length, reconciled: reconciled.length + releasedBadges.length };
+    const releasedMissions = missions.releaseDeferred(userId);
+    const advancedMissions = missions.advance(userId, closeThrough(userId), (id, now) => integrity.hasActiveHoldForScope(id, 'OUTCOME_XP', now));
+    return { expired: expired.length, reconciled: reconciled.length + releasedBadges.length + releasedMissions.length + advancedMissions.length };
   }
 
   function runIntegrityAudit(userId, { persist = false } = {}) {
@@ -757,7 +760,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
 
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
-    advanceRewards:(userId)=>{ missions.current(userId); return badges.evaluate(userId); },
+    advanceRewards:(userId)=>{ const missionResults=missions.advance(userId,closeThrough(userId),(id,now)=>integrity.hasActiveHoldForScope(id,'OUTCOME_XP',now)); missions.current(userId); return [...missionResults,...missions.releaseDeferred(userId),...badges.releaseDeferred(userId),...badges.evaluate(userId)]; },
     badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId), rerollMission:(userId,slot)=>missions.reroll(userId,slot),
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory,rewards,missions:missionRepository}};
 }
