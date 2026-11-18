@@ -26,6 +26,15 @@ export function createShopRepository(db) {
         FROM purchases WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT ?`).safeIntegers().all(userId,limit)
         .map(({ metaJson, ...row }) => ({ ...row, meta: JSON.parse(metaJson) }));
     },
+    adminPurchase(id) { return db.prepare(`SELECT id,user_id AS userId,item_slug AS itemSlug,item_type AS itemType,cost_xp AS costXp,
+      ledger_entry_id AS ledgerEntryId,status,created_at AS createdAt FROM purchases WHERE id=?`).get(id)??null; },
+    refundPurchase(id) { return db.prepare("UPDATE purchases SET status='REFUNDED' WHERE id=? AND status='COMPLETED'").run(id).changes>0; },
+    removeCosmetic(userId,slug) { return db.prepare('DELETE FROM user_cosmetics WHERE user_id=? AND item_slug=?').run(userId,slug).changes>0; },
+    unequipCosmetic(userId,slug,updatedAt) { db.prepare('UPDATE user_profile SET equipped_theme=CASE WHEN equipped_theme=? THEN NULL ELSE equipped_theme END,equipped_frame=CASE WHEN equipped_frame=? THEN NULL ELSE equipped_frame END,updated_at=? WHERE user_id=?').run(slug,slug,updatedAt,userId); },
+    insertRefundActivity({userId,id,at,data}) { db.prepare(`INSERT OR IGNORE INTO activity_items(user_id,kind,ref_type,ref_id,occurred_at,summary_code,data_json,dedupe_key)
+      VALUES(?,'PURCHASE','PURCHASE',?,?,'PURCHASE_REFUNDED',?,?)`).run(userId,String(id),at,JSON.stringify(data),`PURCHASE:${id}:REFUNDED`); },
+    insertRefundNotice({userId,id,at,data}) { db.prepare(`INSERT OR IGNORE INTO user_notices(user_id,kind,code,data_json,dedupe_key,created_at)
+      VALUES(?,'REWARD','PURCHASE_REFUNDED',?,?,?)`).run(userId,JSON.stringify(data),`PURCHASE:${id}:REFUNDED:NOTICE`,at); },
     insertActivity({ userId, id, createdAt, data }) {
       return db.prepare(`INSERT OR IGNORE INTO activity_items(user_id,kind,ref_type,ref_id,occurred_at,summary_code,data_json,dedupe_key)
         VALUES(?,'PURCHASE','PURCHASE',?,?,'PURCHASE_COMPLETED',?,?)`).run(userId,String(id),createdAt,JSON.stringify(data),`PURCHASE:${id}`).changes > 0;

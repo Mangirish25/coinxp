@@ -146,13 +146,13 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
     return {entryId,spendableXp:progress.spendableXp-costXp,lifetimeXp:progress.lifetimeXp,level:progress.maxLevelReached};
   }
 
-  function recordSpendRefund({userId,purchaseId,costXp,spendLedgerId,now=nowIso()}) {
+  function recordSpendRefund({userId,purchaseId,costXp,spendLedgerId,now=nowIso(),reasonCode='CHALLENGE_CANCEL_REFUND',actor='system',note=null}) {
     const progress=ensureProgress(userId);
     if(!progress)throw httpError(404,'USER_NOT_FOUND','User not found.');
     const spendableXp=safeTotal(BigInt(progress.spendableXp)+BigInt(costXp),'Spendable XP');
     const entryId=ledger.insert({userId,entryType:'SPEND',ruleId:'XP-013',entitlementKey:null,transitionNo:null,
       idempotencyKey:`u${userId}:SPEND:REFUND:${purchaseId}`,lifetimeDelta:0,balanceDelta:costXp,periodType:'once',periodKey:`REFUND:${purchaseId}`,
-      reversesEntryId:spendLedgerId,sourceEventId:null,reasonCode:'CHALLENGE_CANCEL_REFUND',note:null,configVersion:CONFIG_VERSION,actor:'system',createdAt:now});
+      reversesEntryId:spendLedgerId,sourceEventId:null,reasonCode,note,configVersion:CONFIG_VERSION,actor,createdAt:now});
     ledger.updateProgress(userId,{lifetimeXp:progress.lifetimeXp,spendableXp,maxLevelReached:progress.maxLevelReached,lastLedgerId:entryId,updatedAt:now});
     return {entryId,spendableXp,lifetimeXp:progress.lifetimeXp,level:progress.maxLevelReached};
   }

@@ -3,6 +3,7 @@ import { createDatabase } from '../src/db/connection.js';
 import { migrateDatabase } from '../src/db/migrator.js';
 import { createGamificationEngine } from '../src/gamification/engine.js';
 import { createBadgeAdminService } from '../src/services/badgeAdminService.js';
+import { createShopAdminService } from '../src/services/shopAdminService.js';
 
 const [area,command,...args]=process.argv.slice(2);
 const option=(name)=>{const index=args.indexOf(`--${name}`);return index<0?null:args[index+1]??null;};
@@ -13,6 +14,7 @@ try {
   migrateDatabase(db);
   const engine=createGamificationEngine({db,enabled:env.gamificationEnabled});
   const admin=createBadgeAdminService({db,gameEngine:engine});
+  const shopAdmin=createShopAdminService({db,gameEngine:engine});
   if(area==='badges'&&command==='backfill'){
     if(userOption&&(!Number.isSafeInteger(userId)||userId<1))throw new Error('--user must be a positive integer.');
     if(slug&&!engine.rewardConfig().badges.some((family)=>family.slug===slug))throw new Error(`Unknown badge slug: ${slug}`);
@@ -35,5 +37,10 @@ try {
       throw new Error('Usage: badges revoke --user <id> --slug <slug> --tier <n> --case <id> --actor <name> --note <text> [--apply]');
     if(!input.actor||!input.note||input.note.trim().length<10)throw new Error('Revocation requires --actor and a note of at least 10 characters.');
     print(admin.revoke(input,{apply}));
-  } else throw new Error('Usage: rewardsCli.js badges <backfill|revoke> ... [--apply]');
+  } else if(area==='shop'&&command==='refund'){
+    const purchaseId=Number(args.find((value)=>/^\d+$/.test(value)));
+    const actor=option('actor');const note=option('note');
+    if(!Number.isSafeInteger(purchaseId)||purchaseId<1||!actor||!note||note.trim().length<10)throw new Error('Usage: shop refund <purchaseId> --actor <name> --note <text of at least 10 characters> [--apply]');
+    print(shopAdmin.refund(purchaseId,{actor,note:note.trim()},{apply}));
+  } else throw new Error('Usage: rewardsCli.js badges <backfill|revoke> ... | shop refund <purchaseId> ... [--apply]');
 } finally { db.close(); }

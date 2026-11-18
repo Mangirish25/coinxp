@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from './app.js';
 import { createDatabase } from './db/connection.js';
 import { migrateDatabase } from './db/migrator.js';
+import { createShopAdminService } from './services/shopAdminService.js';
 
 describe('Part 9 XP shop and CR-10/11', () => {
   let db; let app; let cookie;
@@ -46,5 +47,19 @@ describe('Part 9 XP shop and CR-10/11', () => {
     expect(db.prepare('SELECT spendable_xp AS xp FROM user_progress WHERE user_id=1').get().xp).toBe(300);
     expect(db.prepare('SELECT count(*) AS count FROM purchases WHERE user_id=1').get().count).toBe(0);
     expect(db.prepare("SELECT count(*) AS count FROM xp_ledger WHERE entry_type='SPEND'").get().count).toBe(0);
+  });
+
+  it('XP-013: dry-run-first admin refund reverses a cosmetic purchase exactly once',async()=>{
+    addXp(1000);
+    const purchased=await request(app).post('/api/shop/purchase').set('Cookie',cookie).set('Idempotency-Key','refund-theme-1').send({itemSlug:'theme_forest'}).expect(201);
+    await request(app).post('/api/profile/equip').set('Cookie',cookie).send({slot:'THEME',itemSlug:'theme_forest'}).expect(200);
+    const admin=createShopAdminService({db,gameEngine:app.locals.gameEngine});
+    const input={actor:'reviewer',note:'Reviewed the customer request and approved this refund.'};
+    expect(admin.refund(purchased.body.id,input).dryRun).toBe(true);
+    expect(admin.refund(purchased.body.id,input,{apply:true})).toMatchObject({applied:true,refundXp:200,spendableXp:1000});
+    expect(admin.refund(purchased.body.id,input,{apply:true}).idempotent).toBe(true);
+    expect(db.prepare('SELECT count(*) AS n FROM user_cosmetics WHERE user_id=1 AND item_slug=\'theme_forest\'').get().n).toBe(0);
+    expect(db.prepare('SELECT equipped_theme FROM user_profile WHERE user_id=1').get().equipped_theme).toBeNull();
+    expect(db.prepare("SELECT count(*) AS n FROM xp_ledger WHERE entry_type='SPEND' AND reverses_entry_id IS NOT NULL").get().n).toBe(1);
   });
 });

@@ -62,6 +62,7 @@ export function createChallengeRepository(db) {
     linkedPurchase(userId, purchaseId) {
       return db.prepare('SELECT id,ledger_entry_id AS ledgerEntryId,cost_xp AS costXp,status FROM purchases WHERE id=? AND user_id=?').get(purchaseId,userId) ?? null;
     },
+    runByPurchase(userId,purchaseId) { return db.prepare(`SELECT id,status FROM challenge_runs WHERE user_id=? AND purchase_id=?`).get(userId,purchaseId)??null; },
     markRefunded(userId, purchaseId) { return db.prepare("UPDATE purchases SET status='REFUNDED' WHERE id=? AND user_id=? AND status='COMPLETED'").run(purchaseId,userId).changes > 0; },
     insertActivity({ userId, kind, id, status, occurredAt, data }) {
       return db.prepare(`INSERT OR IGNORE INTO activity_items(user_id,kind,ref_type,ref_id,occurred_at,summary_code,data_json,dedupe_key)
