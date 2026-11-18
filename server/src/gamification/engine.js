@@ -18,6 +18,7 @@ import { correctionAmnestyPaise, evaluatedSpendPaise, unexpectedExpensePaise } f
 import { buildBudgetWarnings } from './integrity/warnings.js';
 import { createBudgetService } from '../services/budgetService.js';
 import { theoreticalMaximum, checkTheoreticalCeiling } from './integrity/ceiling.js';
+import { assertRewardCatalog } from './rewards/catalog.js';
 
 const inbound = new Set([
   'USER_REGISTERED','TIMEZONE_CHANGED','TRANSACTION_CREATED','TRANSACTION_UPDATED','TRANSACTION_DELETED','TRANSACTION_RESTORED',
@@ -38,6 +39,7 @@ function addDate(date, days) { return shiftDate(date,days); }
 
 export function createGamificationEngine({ db, clock = systemClock, config = defaultRules, logger = console, enabled = true } = {}) {
   if(!db)throw new Error('createGamificationEngine requires a database connection.');
+  assertRewardCatalog(config.rewards);
   const outbox=createOutboxRepository(db);
   const ledger=createLedgerRepository(db);
   const facts=createGamificationFactsRepository(db);
