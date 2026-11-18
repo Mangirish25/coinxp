@@ -3,6 +3,8 @@ import request from 'supertest';
 import { createApp } from './app.js';
 import { createDatabase } from './db/connection.js';
 import { migrateDatabase } from './db/migrator.js';
+import { shiftDate, localInstantToUtc } from './gamification/dateMath.js';
+import { todayInTimezone } from './utils/dates.js';
 
 describe('Part 9 MIS-001/MIS-002 mission assignment', () => {
   let db; let app; let cookie;
@@ -36,5 +38,22 @@ describe('Part 9 MIS-001/MIS-002 mission assignment', () => {
     expect(db.prepare('SELECT status FROM user_missions WHERE id=? AND user_id=1').get(original.id).status).toBe('REPLACED');
     await request(app).post('/api/missions/daily/reroll').set('Cookie', cookie).send({}).expect(409);
     await request(app).post('/api/missions/monthly/reroll').set('Cookie', cookie).send({}).expect(409);
+  });
+
+  it('MIS-003/004: freezes a completed daily mission and awards its configured XP', async () => {
+    const today = todayInTimezone('Asia/Kolkata');
+    const date = shiftDate(today, -1);
+    db.prepare('UPDATE users SET created_at=? WHERE id=1').run('2026-11-01T00:00:00.000Z');
+    const params = JSON.stringify({ catalogVersion: '1.0.0' });
+    const assignedAt = localInstantToUtc(date, 5, 'Asia/Kolkata');
+    const missionId = Number(db.prepare(`INSERT INTO user_missions(user_id,slot,period_key,template_id,status,generation_seq,params_json,assigned_at,catalog_version)
+      VALUES(1,'DAILY',?,'dm_set_limit','ASSIGNED',0,?,?,'1.0.0')`).run(date, params, assignedAt).lastInsertRowid);
+    const setAt = localInstantToUtc(date, 8, 'Asia/Kolkata');
+    db.prepare(`INSERT INTO budget_history(user_id,budget_id,scope,category_id,month,action,old_amount_paise,new_amount_paise,created_at)
+      VALUES(1,NULL,'daily_limit',NULL,NULL,'set',NULL,10000,?)`).run(setAt);
+    app.locals.gameEngine.advanceRewards(1);
+    expect(db.prepare('SELECT status,xp_awarded AS xpAwarded FROM user_missions WHERE id=?').get(missionId)).toMatchObject({ status: 'COMPLETED', xpAwarded: 5 });
+    expect(db.prepare("SELECT lifetime_delta AS delta FROM xp_ledger WHERE user_id=1 AND entitlement_key=? AND entry_type='AWARD'").get(`MIS-004:${missionId}`).delta).toBe(5);
+    expect(db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=1 AND code='MISSION_COMPLETED'").get().count).toBe(1);
   });
 });
