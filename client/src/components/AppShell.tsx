@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards, Sparkles, Flame, Award, Target, ShoppingBag, Swords, UserRound } from 'lucide-react';
+import { Activity, ArrowLeftRight, LayoutDashboard, LogOut, WalletCards, Sparkles, Flame, Award, Target, ShoppingBag, Swords, UserRound, Settings2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { GamificationToastHost } from './GamificationToastHost';
 import { IntegrityNoticeCenter } from './IntegrityNoticeCenter';
@@ -26,6 +26,7 @@ const links = [
   { to: '/shop', label: 'XP Shop', icon: ShoppingBag },
   { to: '/challenges', label: 'Challenges', icon: Swords },
   { to: '/profile', label: 'Profile', icon: UserRound },
+  { to: '/settings', label: 'Settings', icon: Settings2 },
   { to: '/activity', label: 'Activity', icon: Activity },
 ];
 

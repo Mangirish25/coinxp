@@ -23,6 +23,7 @@ import { createProfileRoutes } from './routes/profileRoutes.js';
 import { createActivityRoutes } from './routes/activityRoutes.js';
 import { createNotificationPreferenceRoutes } from './routes/notificationPreferenceRoutes.js';
 import { createCelebrationRoutes } from './routes/celebrationRoutes.js';
+import { createUiPreferenceRoutes } from './routes/uiPreferenceRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -59,6 +60,7 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/activity', createActivityRoutes({ db, env }));
   app.use('/api/notifications', createNotificationPreferenceRoutes({ db, env, clock: gameEngine.clock }));
   app.use('/api/celebrations', createCelebrationRoutes({ db, env, clock: gameEngine.clock }));
+  app.use('/api/ui/preferences', createUiPreferenceRoutes({ db, env, clock: gameEngine.clock }));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

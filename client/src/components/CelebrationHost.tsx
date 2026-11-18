@@ -5,6 +5,7 @@ import { activityApi } from '../services/activityApi';
 import { celebrationApi } from '../services/celebrationApi';
 import { celebrationPlan, type PlannedCelebration } from '../celebrations/celebrationPlan';
 import { celebration } from '../visuals/visuals.config';
+import { useMotionPreferences } from '../motion/MotionProvider';
 
 function headingFor(item: PlannedCelebration) {
   const { code, data } = item.notice;
@@ -32,6 +33,7 @@ function isTyping() {
 }
 
 export function CelebrationHost({ userId }: { userId: number | null }) {
+  const { preferences: uiPreferences } = useMotionPreferences();
   const pending = useQuery({ queryKey: ['celebrations', 'pending', userId], queryFn: celebrationApi.pending,
     enabled: userId !== null, refetchInterval: () => document.visibilityState === 'visible' ? celebration.pollMsVisible : false,
     refetchOnWindowFocus: true });
@@ -59,11 +61,10 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
     const fresh = (pending.data?.data ?? []).filter(({ id }) => !seen.current.has(id));
     if (!fresh.length || items.length || showRecap || preferences.isLoading) return;
     const mutedCategories = (preferences.data?.preferences ?? []).filter(({ enabled }) => !enabled).map(({ category }) => category);
-    const setting = (() => { try { return localStorage.getItem('coinxp:celebrations') as 'ALL' | 'MAJOR' | 'OFF' | null; } catch { return null; } })() ?? 'ALL';
-    const plan = celebrationPlan(fresh, { celebrations: setting, mutedCategories });
+    const plan = celebrationPlan(fresh, { celebrations: uiPreferences.celebrations, mutedCategories });
     const next = [...plan.fullScreen, ...plan.recap];
     if (next.length) { setItems(next); setIndex(0); setShowRecap(plan.fullScreen.length === 0); }
-  }, [pending.data, preferences.data, preferences.isLoading, items.length, showRecap]);
+  }, [pending.data, preferences.data, preferences.isLoading, items.length, showRecap, uiPreferences.celebrations]);
 
   const current = items[index];
   const displayed = showRecap ? items.at(-1) : current;

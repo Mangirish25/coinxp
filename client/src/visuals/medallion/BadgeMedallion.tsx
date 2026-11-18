@@ -2,6 +2,7 @@ import { Award, Flame, Heart, LockKeyhole, ShieldCheck, Star, Target } from 'luc
 import { useId } from 'react';
 import type { BadgeFamily, BadgeTier } from '../../types/rewards';
 import { medallionSpec, type MedallionSize, type MedallionState } from './medallionSpec';
+import { useMotionPreferences } from '../../motion/MotionProvider';
 
 const categoryGlyphs = { TRACKING: Award, STREAK: Flame, BUDGET: ShieldCheck, PROGRESS: Star, CHALLENGE: Target, HABIT: Heart } as const;
 const silhouettes: Record<string, string> = {
@@ -13,12 +14,14 @@ const silhouettes: Record<string, string> = {
 };
 const flameShape = 'M50 5c-5 18-24 25-24 48a24 24 0 0 0 48 0C74 32 57 22 50 5Z';
 
-export function BadgeMedallion({ badge, tier, size = 'md', state, progressBps = 0, onClick }: {
+export function BadgeMedallion({ badge, tier, size = 'md', state, progressBps = 0, onClick, quality, mode }: {
   badge: BadgeFamily; tier: BadgeTier; size?: MedallionSize; state?: MedallionState; progressBps?: number; onClick?: () => void;
+  quality?: 'HIGH' | 'MEDIUM' | 'LOW'; mode?: 'FULL' | 'REDUCED' | 'OFF';
 }) {
+  const motion = useMotionPreferences();
   const reactId = useId().replaceAll(':', '');
   const visualState = state ?? (tier.status === 'ACTIVE' ? 'UNLOCKED' : 'LOCKED');
-  const spec = medallionSpec({ slug: badge.slug, category: badge.category, tier: tier.tier, rarity: tier.rarity as 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY', state: visualState, progressBps, size });
+  const spec = medallionSpec({ slug: badge.slug, category: badge.category, tier: tier.tier, rarity: tier.rarity as 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY', state: visualState, progressBps, size, quality: quality ?? motion.quality, mode: mode ?? motion.effectiveMode });
   const Glyph = categoryGlyphs[badge.category as keyof typeof categoryGlyphs] ?? Award;
   const id = `medal-${reactId}`;
   const shape = spec.shape === 'flame' ? <path d={flameShape} /> : <polygon points={silhouettes[spec.shape] ?? silhouettes.squircle} />;

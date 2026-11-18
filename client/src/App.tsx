@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppShell } from './components/AppShell';
 import { CelebrationHost } from './components/CelebrationHost';
+import { MotionProvider } from './motion/MotionProvider';
 import { GuestRoute } from './components/GuestRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -21,6 +22,7 @@ const ShopPage = lazy(() => import('./pages/ShopPage').then(({ ShopPage }) => ({
 const ChallengesPage = lazy(() => import('./pages/ChallengesPage').then(({ ChallengesPage }) => ({ default: ChallengesPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then(({ ProfilePage }) => ({ default: ProfilePage })));
 const ActivityPage = lazy(() => import('./pages/ActivityPage').then(({ ActivityPage }) => ({ default: ActivityPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(({ SettingsPage }) => ({ default: SettingsPage })));
 
 function CelebrationHostForCurrentUser() {
   const { user } = useAuth();
@@ -30,6 +32,7 @@ function CelebrationHostForCurrentUser() {
 export function App() {
   return (
     <AuthProvider>
+      <MotionProvider>
       <BrowserRouter>
         <Suspense fallback={<main aria-busy="true" aria-label="Loading page" className="mx-auto min-h-64 max-w-6xl p-6"><div className="h-9 w-48 animate-pulse motion-reduce:animate-none rounded-xl bg-white" /><div className="mt-6 h-56 animate-pulse motion-reduce:animate-none rounded-2xl bg-white" /></main>}>
         <Routes>
@@ -52,12 +55,14 @@ export function App() {
               <Route path="challenges" element={<ChallengesPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="activity" element={<ActivityPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>
         </Routes>
         <CelebrationHostForCurrentUser />
         </Suspense>
       </BrowserRouter>
+      </MotionProvider>
     </AuthProvider>
   );
 }

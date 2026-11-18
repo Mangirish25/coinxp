@@ -2,6 +2,7 @@ import { Snowflake } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { flameSpec, seededOffsets, type FlameState, type FlameMotionMode } from './flameSpec';
 import type { QualityTier } from '../visuals.config';
+import { useMotionPreferences } from '../../motion/MotionProvider';
 
 export interface FlameRendererProps {
   length: number;
@@ -10,7 +11,7 @@ export interface FlameRendererProps {
   mode: FlameMotionMode;
 }
 
-export interface StreakFlameProps extends Omit<FlameRendererProps, 'mode'> { mode?: FlameMotionMode }
+export interface StreakFlameProps extends Omit<FlameRendererProps, 'mode' | 'quality'> { mode?: FlameMotionMode; quality?: QualityTier }
 
 export type Renderer = (props: FlameRendererProps) => ReactNode;
 
@@ -37,11 +38,14 @@ function SvgFlameRenderer({ length, state, quality, mode }: FlameRendererProps) 
   </svg>;
 }
 
-export function StreakFlame({ length, state, quality = 'MEDIUM', mode = 'FULL' }: StreakFlameProps) {
-  const spec = flameSpec({ length, state, quality, mode });
+export function StreakFlame({ length, state, quality, mode }: StreakFlameProps) {
+  const motion = useMotionPreferences();
+  const chosenMode = mode ?? motion.effectiveMode;
+  const chosenQuality = quality ?? motion.quality;
+  const spec = flameSpec({ length, state, quality: chosenQuality, mode: chosenMode });
   return <div className="inline-flex flex-col items-center" role="img" aria-label={spec.label}>
     <div className="relative h-24 w-24" aria-hidden="true">
-      {state === 'INACTIVE' ? <svg viewBox="0 0 100 100" className="h-full w-full"><path d="M50 8C45 23 31 28 31 47c0 13 8 23 19 23s19-10 19-23C69 30 57 22 50 8Z" fill="none" stroke="#94a3b8" strokeWidth="4" strokeDasharray="4 4" /></svg> : <SvgFlameRenderer length={length} state={state} quality={quality} mode={mode} />}
+      {state === 'INACTIVE' ? <svg viewBox="0 0 100 100" className="h-full w-full"><path d="M50 8C45 23 31 28 31 47c0 13 8 23 19 23s19-10 19-23C69 30 57 22 50 8Z" fill="none" stroke="#94a3b8" strokeWidth="4" strokeDasharray="4 4" /></svg> : <SvgFlameRenderer length={length} state={state} quality={chosenQuality} mode={chosenMode} />}
       {state === 'FROZEN' && <Snowflake aria-hidden="true" className="absolute bottom-1 right-1 rounded-full bg-white p-1 text-sky-600" size={24} />}
     </div>
     <span className="text-sm font-semibold tabular-nums">{length} {length === 1 ? 'day' : 'days'}</span>
