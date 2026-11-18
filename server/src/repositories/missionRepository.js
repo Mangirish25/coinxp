@@ -6,7 +6,11 @@ export function createMissionRepository(db) {
       .map(({ paramsJson, ...row }) => ({ ...row, params: JSON.parse(paramsJson) }));
   }
   return {
+    transaction(work) { return db.transaction(work)(); },
     rows,
+    replaceAssigned(userId, id) {
+      return db.prepare("UPDATE user_missions SET status='REPLACED' WHERE id=? AND user_id=? AND status='ASSIGNED'").run(id, userId).changes > 0;
+    },
     completedTemplates(userId) {
       return new Set(db.prepare("SELECT DISTINCT template_id AS templateId FROM user_missions WHERE user_id=? AND status='COMPLETED'")
         .all(userId).map(({ templateId }) => templateId));

@@ -18,5 +18,6 @@ describe('MissionsPage', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Set Limit' })).toBeTruthy());
     expect(screen.getByText('Daily · 2026-11-18')).toBeTruthy();
     expect(screen.getByText('In progress · verified at period close')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reroll mission' })).toBeTruthy();
   });
 });

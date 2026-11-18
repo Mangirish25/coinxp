@@ -758,7 +758,7 @@ export function createGamificationEngine({ db, clock = systemClock, config = def
   return {enabled,clock,enqueue,processUser,settleUser,closedThrough:closeThrough,publishStreak,awardStreakMilestone,summary,ledgerPage,dailyReviewStatus,createReview,acknowledgeFeed,
     publicRules:clientRules,rebuildCache,reconcileRange,releaseSweep,runIntegrityAudit,adjust,clawback,requeueDead,listFlags,localDate,recordIntegritySignal,
     advanceRewards:(userId)=>{ missions.current(userId); return badges.evaluate(userId); },
-    badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId),
+    badgeCatalog:(userId)=>badges.catalog(userId), missionCurrent:(userId)=>missions.current(userId), rerollMission:(userId,slot)=>missions.reroll(userId,slot),
     dependencies:{db,outbox,ledger,facts,settlements,transactions,budgetHistory,rewards,missions:missionRepository}};
 }
 

@@ -25,4 +25,16 @@ describe('Part 9 MIS-001/MIS-002 mission assignment', () => {
     expect(db.prepare("SELECT count(*) AS count FROM user_missions WHERE user_id=1 AND status<>'REPLACED'").get().count).toBe(2);
     expect(first.body.data.every(({ params }) => params.catalogVersion === '1.0.0')).toBe(true);
   });
+
+  it('MIS-005: replaces an assigned daily mission once using deterministic ranking', async () => {
+    db.prepare('UPDATE users SET created_at=? WHERE id=1').run('2026-11-01T00:00:00.000Z');
+    const before = await request(app).get('/api/missions').set('Cookie', cookie).expect(200);
+    const original = before.body.data.find(({ slot }) => slot === 'DAILY');
+    const replaced = await request(app).post('/api/missions/daily/reroll').set('Cookie', cookie).send({}).expect(200);
+    expect(replaced.body).toMatchObject({ slot: 'DAILY', periodKey: original.periodKey, status: 'ASSIGNED', generationSeq: 1 });
+    expect(replaced.body.templateId).not.toBe(original.templateId);
+    expect(db.prepare('SELECT status FROM user_missions WHERE id=? AND user_id=1').get(original.id).status).toBe('REPLACED');
+    await request(app).post('/api/missions/daily/reroll').set('Cookie', cookie).send({}).expect(409);
+    await request(app).post('/api/missions/monthly/reroll').set('Cookie', cookie).send({}).expect(409);
+  });
 });
