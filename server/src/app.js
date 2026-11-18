@@ -30,6 +30,9 @@ import { notFoundHandler } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { originGuard } from './middleware/originGuard.js';
 import { createTestClockRoutes } from './routes/testClockRoutes.js';
+import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 export function createApp({ db, config, logger, gamificationHandler, clock } = {}) {
   if (!db) throw new Error('createApp requires a database connection.');
@@ -53,8 +56,8 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   } : undefined));
   if (env.nodeEnv !== 'production') app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(cookieParser());
-  app.use((req, res, next) => express.json({ limit: req.path.startsWith('/api/auth') ? '10kb' : '100kb' })(req, res, next));
   app.use(originGuard({ enabled: env.nodeEnv === 'production', origin: env.publicOrigin ?? env.clientOrigin }));
+  app.use((req, res, next) => express.json({ limit: req.path.startsWith('/api/auth') ? '10kb' : '100kb' })(req, res, next));
   app.use(requestLogger(logger));
   app.locals.scheduler = null;
   app.use('/api', createHealthRoutes(db, gameEngine, { env, getScheduler: () => app.locals.scheduler }));
@@ -80,6 +83,20 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use('/api/account', createAccountRoutes({ db, env, clock: gameEngine.clock }));
   if (env.nodeEnv === 'test' && env.enableTestClock && clock?.set && clock?.advance) {
     app.use('/api/test/clock', createTestClockRoutes(clock));
+  }
+  if (env.nodeEnv === 'production') {
+    const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+    const clientBuild = path.join(repositoryRoot, 'client', 'dist');
+    if (existsSync(clientBuild)) {
+      app.use(express.static(clientBuild, { index: false, immutable: true, maxAge: '1y', setHeaders(res, filePath) {
+        if (path.basename(filePath) === 'index.html') res.setHeader('Cache-Control', 'no-cache');
+      } }));
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api/')) return next();
+        res.setHeader('Cache-Control', 'no-cache');
+        res.sendFile(path.join(clientBuild, 'index.html'));
+      });
+    }
   }
   app.use(notFoundHandler);
   app.use(errorHandler);
