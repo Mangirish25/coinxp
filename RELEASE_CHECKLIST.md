@@ -18,6 +18,7 @@ Completed Part 10 slices:
 - [x] QA-007 CI provisions Chromium, Firefox and WebKit and runs the browser smoke and axe checks across desktop/mobile projects
 - [x] QA-008 repeating CSS and dynamic flame cycles have an automated minimum-duration guard against motion above three cycles per second
 - [x] Playwright recovery flow verifies transaction load errors can be retried on desktop and mobile while navigation remains available
+- [x] Client production build enforces per-asset gzip budgets for JavaScript and CSS
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
