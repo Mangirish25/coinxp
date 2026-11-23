@@ -27,4 +27,19 @@ describe('NOT-005 celebration host', () => {
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/celebrations/claim'), expect.objectContaining({ method: 'POST' }));
     client.clear();
   });
+
+  it('NOT-005: announces the level and title change from the payload', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request) => {
+      if (String(_url).includes('/api/notifications/preferences')) return { ok: true, status: 200, json: async () => ({ preferences: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => ({ data: [
+        { id: 9, kind: 'PROGRESS', code: 'LEVEL_UP', createdAt: '2026-11-23T00:00:00.000Z',
+          data: { fromLevel: 1, toLevel: 2, titleBefore: 'Beginner', titleAfter: 'Budget Explorer', titleChanged: true, lifetimeXp: 105, progressBps: 250 } },
+      ] }) } as Response;
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><CelebrationHost userId={1} /></QueryClientProvider>);
+    expect(await screen.findByRole('dialog', { name: 'Level 2 · Budget Explorer' })).toBeTruthy();
+    expect(screen.getByText('Level 1 to 2. Your title changed from Beginner to Budget Explorer.')).toBeTruthy();
+    client.clear();
+  });
 });

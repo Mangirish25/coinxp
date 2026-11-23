@@ -12,7 +12,7 @@ function headingFor(item: PlannedCelebration) {
   if (code.startsWith('STREAK_MILESTONE')) return `${Number(data.length ?? data.milestone)} day streak`;
   if (code === 'BADGE_UNLOCKED') return 'Badge unlocked';
   if (code === 'CHALLENGE_COMPLETED') return 'Challenge completed';
-  if (code === 'LEVEL_UP') return data.titleChanged === true ? 'New level and title' : 'Level up';
+  if (code === 'LEVEL_UP') return data.titleChanged === true ? `Level ${String(data.toLevel)} · ${String(data.titleAfter)}` : `Level ${String(data.toLevel)}`;
   return 'A progress update';
 }
 
@@ -22,8 +22,18 @@ function textFor(item: PlannedCelebration) {
   if (code === 'BADGE_UNLOCKED') return `You earned ${String(data.slug ?? 'a badge').replaceAll('_', ' ')}.`;
   if (code === 'CHALLENGE_COMPLETED') return 'You completed your challenge.';
   if (code === 'MISSION_COMPLETED') return 'You completed a mission.';
-  if (code === 'DAY_RECAP') return 'Your settled progress is ready to review.';
-  if (code === 'STREAK_BROKEN') return 'A streak ended. You can begin again when you are ready.';
+  if (code === 'LEVEL_UP') return data.titleChanged === true
+    ? `Level ${String(data.fromLevel)} to ${String(data.toLevel)}. Your title changed from ${String(data.titleBefore)} to ${String(data.titleAfter)}.`
+    : `You reached level ${String(data.toLevel)}.`;
+  if (code === 'DAY_RECAP') {
+    const delta = Number(data.xpDelta ?? 0);
+    const streak = Number(data.streakAfter ?? 0) !== Number(data.streakBefore ?? 0)
+      ? ` Your tracking streak moved from ${String(data.streakBefore ?? 0)} to ${String(data.streakAfter ?? 0)} days.` : '';
+    return `Settled progress for ${String(data.date ?? 'your day')}: ${delta > 0 ? '+' : ''}${delta} XP.${streak}`;
+  }
+  if (code === 'STREAK_BROKEN') return `A ${String(data.lengthAtEnd ?? 0)}-day streak ended. You can begin again when you are ready.`;
+  if (code === 'STREAK_FREEZE_USED') return `A freeze protected your ${String(data.length ?? 0)}-day streak on ${String(data.date ?? 'that day')}.`;
+  if (code === 'STREAK_RESTORED') return `Your comeback restored the streak from ${String(data.fromLength ?? 0)} to ${String(data.toLength ?? 0)} days.`;
   return 'Your progress has been recorded.';
 }
 
