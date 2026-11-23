@@ -7,6 +7,7 @@ Completed Part 10 slices:
 - [x] Badge, level-up, streak, mission, challenge, purchase, and day recap notices carry presentation payloads without financial data
 - [x] Atomic per-notice celebration claims prevent simultaneous devices from starting the same sequence; expired claims can be recovered
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
+- [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
 
 - [x] Production same-origin cookie/header/origin baseline groundwork
