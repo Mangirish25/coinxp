@@ -77,14 +77,14 @@ describe('NOT-005 celebration host', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><CelebrationHost userId={1} /></QueryClientProvider>);
     expect(await screen.findByRole('dialog', { name: 'Level 2 · Explorer' })).toBeTruthy();
-    expect(document.body.style.overflow).toBe('hidden');
+    await waitFor(() => expect(document.body.style.overflow).toBe('hidden'));
     const skip = screen.getByRole('button', { name: 'Skip' }) as HTMLButtonElement;
     expect(skip.disabled).toBe(true);
     await waitFor(() => expect(document.activeElement).toBe(skip), { timeout: 1500 });
     fireEvent.click(skip);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(document.activeElement).toBe(trigger);
-    expect(document.body.style.overflow).toBe('auto');
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    await waitFor(() => expect(document.body.style.overflow).toBe('auto'));
     document.body.style.overflow = previousOverflow;
     trigger.remove();
     client.clear();

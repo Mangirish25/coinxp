@@ -16,6 +16,7 @@ Completed Part 10 slices:
 - [x] QA-005 automated axe WCAG checks pass on login, registration, and deterministic flame, medallion, and streak calendar stories
 - [x] QA-006 deterministic flame, medallion, and full-year calendar screenshot baselines are captured and compared at desktop and mobile sizes
 - [x] QA-007 CI provisions Chromium, Firefox and WebKit and runs the browser smoke and axe checks across desktop/mobile projects
+- [x] QA-008 repeating CSS and dynamic flame cycles have an automated minimum-duration guard against motion above three cycles per second
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
@@ -27,6 +28,7 @@ Completed Part 10 slices:
 - [x] Account deletion, 30-day grace, restore, hard-erasure integration check
 - [x] Password change invalidates existing sessions with a per-user token version
 - [x] SEC-002 authorization sweep enumerates mounted routers and rejects unauthenticated access across all 65 private route/method cases
+- [x] SEC-003 pins the Node base image by digest and compiles native SQLite dependencies in a disposable builder stage
 - [ ] Full celebration payload contract, instant path, cross-device exactly-once behavior
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
 - [ ] UI state coverage for offline/partial failure at all screen sizes
@@ -35,6 +37,6 @@ Completed Part 10 slices:
 - [ ] axe, contrast matrix, screen-reader and flash-rate review
 - [ ] Lighthouse, frame-time, memory leak and final bundle-budget gates
 - [ ] Nightly encrypted off-host backup, retention, restore check, and rehearsed recovery
-- [ ] CI supply-chain/secret/container scans and pinned base image digest
+- [ ] CI supply-chain, secret, and container vulnerability scans
 - [ ] Deployment on the chosen host, migration rehearsal, monitoring and disclosure contact
 - [ ] Manual screen-reader pass and owner sign-off
