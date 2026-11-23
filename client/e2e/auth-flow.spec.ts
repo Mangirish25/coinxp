@@ -144,6 +144,65 @@ test('keeps transaction errors recoverable on desktop and mobile', async ({ page
   expect(transactionAttempts).toBeGreaterThanOrEqual(2);
 });
 
+test('keeps dashboard summary available when analytics fail on desktop and mobile', async ({ page }) => {
+  await page.unrouteAll();
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/auth/me') {
+      await route.fulfill({ status: 200, json: user });
+      return;
+    }
+    if (path === '/api/dashboard/summary') {
+      await route.fulfill({ status: 200, json: {
+        month: '2026-11', isCurrentMonth: true,
+        totalBalancePaise: 125000, totalBalance: '₹1,250.00',
+        monthIncomePaise: 200000, monthIncome: '₹2,000.00',
+        monthExpensePaise: 75000, monthExpense: '₹750.00',
+        monthNetPaise: 125000, monthNet: '₹1,250.00', savingsRateBps: 6250,
+        comparison: { incomeDeltaPaise: 0, income: '₹0.00', expenseDeltaPaise: 0, expense: '₹0.00', expenseChangeBps: null },
+        budget: { monthlyTotal: null, remainingPaise: null, remaining: null, safeDailySpendPaise: null, safeDailySpend: null },
+        today: { date: '2026-11-23', spentPaise: 0, spent: '₹0.00', dailyLimitPaise: null, dailyLimit: null, remainingPaise: null, remaining: null, status: 'no_budget' },
+        averageDailySpendPaise: 3750, averageDailySpend: '₹37.50', transactionCount: 2,
+        recentTransactions: [], topCategories: [],
+      } });
+      return;
+    }
+    if (path === '/api/gamification/summary') {
+      await route.fulfill({ status: 200, json: { lifetimeXp: 0, spendableXp: 0, level: 1, title: 'Beginner', nextTitle: 'Budget Explorer', xpIntoLevel: 0, xpForNext: 100, progressBps: 0, today: { trackingCredited: false, reviewCompleted: false, noSpendCapRemaining: 2 }, unseen: [], lastEntries: [], settlement: { lastSettledDate: null, pending: true } } });
+      return;
+    }
+    if (path === '/api/gamification/daily-review/today') {
+      await route.fulfill({ status: 200, json: { localDate: '2026-11-23', completed: false, available: false, blockers: [], trackingCredited: false, noSpendCapRemaining: 2, hasExpense: false } });
+      return;
+    }
+    if (path === '/api/streaks') {
+      await route.fulfill({ status: 200, json: { tracking: { status: 'NONE', current: 0, longest: 0, trackedToday: false, atRisk: false, freezeWouldProtect: false, settlingDate: null, nextMilestone: null, milestones: [], comeback: null }, secondary: {}, freezes: { inventory: 0, cap: 2 }, through: '2026-11-22', recentEvents: [], week: [], lastPeriod: null, milestones: { reached: [], next: null } } });
+      return;
+    }
+    if (path === '/api/analytics/category-breakdown') {
+      await route.fulfill({ status: 503, json: { error: { code: 'SERVICE_UNAVAILABLE', message: 'Try again.' } } });
+      return;
+    }
+    if (path === '/api/analytics/daily-spending') {
+      await route.fulfill({ status: 200, json: { days: [], dailyLimitPaise: null, maxDay: null } });
+      return;
+    }
+    if (path === '/api/analytics/income-vs-expense') {
+      await route.fulfill({ status: 200, json: [] });
+      return;
+    }
+    await route.fulfill({ status: 200, json: {} });
+  });
+
+  await page.goto('/dashboard');
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await expect(page.getByText('Total balance')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  const categorySection = page.getByRole('heading', { name: 'Spending by category' }).locator('..');
+  await expect(categorySection.getByRole('alert')).toContainText('Retry');
+  await expect(page.getByRole('heading', { name: 'Recent transactions' })).toBeVisible();
+});
+
 test('login and registration forms pass automated WCAG checks', async ({ page }) => {
   for (const route of ['/login', '/register']) {
     await page.goto(route);
