@@ -232,3 +232,18 @@ test('motion lab flame, medallion, and calendar stories pass automated WCAG chec
     }
   }
 });
+
+test('honors the operating system reduced-motion preference in flame and badge visuals', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+
+  await page.goto('http://127.0.0.1:6006/iframe.html?id=motion-lab-streak-flame--interactive&viewMode=story');
+  const flame = page.locator('.streak-flame-animated').first();
+  await expect(flame).toBeVisible();
+  await expect.poll(() => flame.evaluate((element) => getComputedStyle(element).animationName)).toBe('none');
+
+  await page.goto('http://127.0.0.1:6006/iframe.html?id=motion-lab-badge-medallion--rare-reveal&viewMode=story');
+  const medallion = page.locator('.badge-medallion-motion').first();
+  await expect(medallion).toBeVisible();
+  await expect.poll(() => medallion.evaluate((element) => getComputedStyle(element).animationName)).toBe('none');
+  await expect.poll(() => medallion.evaluate((element) => getComputedStyle(element).transitionDuration)).toBe('0s');
+});
