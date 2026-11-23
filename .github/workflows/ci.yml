@@ -26,3 +26,28 @@ jobs:
       - run: npm run test:e2e --workspace client
       - run: npm audit --omit=dev --audit-level=high
       - run: docker build -t coinxp:${{ github.sha }} .
+      - name: Run container readiness smoke test
+        shell: bash
+        run: |
+          docker run -d --name coinxp-smoke \
+            -e JWT_SECRET=coinxp-container-smoke-secret-with-at-least-32-characters \
+            -e PUBLIC_ORIGIN=http://localhost:3001 \
+            -e TRUST_PROXY=1 \
+            -e CLIENT_ORIGIN=http://localhost:3001 \
+            -e SCHEDULER_ENABLED=false \
+            -p 127.0.0.1:3001:3001 \
+            coinxp:${{ github.sha }}
+          trap 'docker logs coinxp-smoke || true; docker rm -f coinxp-smoke || true' EXIT
+          for attempt in $(seq 1 45); do
+            status="$(docker inspect --format='{{.State.Health.Status}}' coinxp-smoke)"
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "$status" = "unhealthy" ]; then
+              docker logs coinxp-smoke
+              exit 1
+            fi
+            sleep 2
+          done
+          docker logs coinxp-smoke
+          exit 1
