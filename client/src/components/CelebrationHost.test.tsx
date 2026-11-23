@@ -60,4 +60,28 @@ describe('NOT-005 celebration host', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     client.clear();
   });
+
+  it('MOT-004: focuses Skip when available and restores focus to the trigger', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request) => {
+      if (String(_url).includes('/api/notifications/preferences')) return { ok: true, status: 200, json: async () => ({ preferences: [] }) } as Response;
+      if (String(_url).includes('/api/celebrations/claim')) return { ok: true, status: 200, json: async () => ({ data: [
+        { id: 12, kind: 'PROGRESS', code: 'LEVEL_UP', createdAt: '2026-11-23T00:00:00.000Z', data: { fromLevel: 1, toLevel: 2, titleChanged: true, titleBefore: 'Beginner', titleAfter: 'Explorer' } },
+      ] }) } as Response;
+      return { ok: true, status: 200, json: async () => ({ acknowledgedThrough: 12 }) } as Response;
+    }));
+    const trigger = document.createElement('button');
+    document.body.append(trigger);
+    trigger.focus();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><CelebrationHost userId={1} /></QueryClientProvider>);
+    expect(await screen.findByRole('dialog', { name: 'Level 2 · Explorer' })).toBeTruthy();
+    const skip = screen.getByRole('button', { name: 'Skip' }) as HTMLButtonElement;
+    expect(skip.disabled).toBe(true);
+    await waitFor(() => expect(document.activeElement).toBe(skip), { timeout: 1500 });
+    fireEvent.click(skip);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+    client.clear();
+  });
 });

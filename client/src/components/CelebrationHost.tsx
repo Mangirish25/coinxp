@@ -46,6 +46,8 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
   const { preferences: uiPreferences, effectiveMode } = useMotionPreferences();
   const seen = useRef(new Set<number>());
   const dialog = useRef<HTMLDivElement>(null);
+  const skipButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const [items, setItems] = useState<PlannedCelebration[]>([]);
   const [index, setIndex] = useState(0);
   const [showRecap, setShowRecap] = useState(false);
@@ -81,6 +83,15 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
   const displayed = showRecap ? items.at(-1) : current;
   const recapRows = items.filter(({ fullScreen }) => !fullScreen);
 
+  useEffect(() => {
+    if (displayed) {
+      if (!returnFocus.current && document.activeElement instanceof HTMLElement) returnFocus.current = document.activeElement;
+      return;
+    }
+    returnFocus.current?.focus();
+    returnFocus.current = null;
+  }, [displayed]);
+
   async function finish() {
     for (const item of items) seen.current.add(item.notice.id);
     const high = Math.max(...items.map(({ notice }) => notice.id));
@@ -108,7 +119,8 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
 
   useEffect(() => {
     if (!displayed || suspended) return;
-    dialog.current?.focus();
+    if (canSkip && !showRecap) skipButton.current?.focus();
+    else dialog.current?.focus();
     const trap = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && canSkip) { event.preventDefault(); advance(); }
       if (event.key !== 'Tab') return;
@@ -119,7 +131,7 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
     };
     document.addEventListener('keydown', trap);
     return () => document.removeEventListener('keydown', trap);
-  }, [displayed, suspended, canSkip]);
+  }, [displayed, suspended, canSkip, showRecap]);
 
   if (!displayed || suspended) return null;
   const xpTotal = items.reduce((total, item) => {
@@ -143,7 +155,7 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
         <h2 id="celebration-title" className="mt-5 text-2xl font-semibold">{headingFor(displayed)}</h2>
         <p id="celebration-copy" aria-live="polite" className="mt-2 text-sm text-ink-600">{textFor(displayed)}</p>
       </>}
-      <div className="mt-7 flex justify-center gap-3"><button type="button" disabled={!showRecap && !canSkip} onClick={advance} className="min-h-11 rounded-xl bg-brand-700 px-5 py-2 font-medium text-white disabled:opacity-60">{showRecap ? 'Continue' : 'Skip'}</button>
+      <div className="mt-7 flex justify-center gap-3"><button ref={skipButton} type="button" disabled={!showRecap && !canSkip} onClick={advance} className="min-h-11 rounded-xl bg-brand-700 px-5 py-2 font-medium text-white disabled:opacity-60">{showRecap ? 'Continue' : 'Skip'}</button>
         {showRecap && <button type="button" aria-label="Close celebration recap" onClick={() => void finish()} className="grid min-h-11 min-w-11 place-items-center rounded-xl border"><X aria-hidden="true" /></button>}</div>
     </section>
   </div>;
