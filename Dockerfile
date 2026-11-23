@@ -32,6 +32,7 @@ COPY server/package.json server/package.json
 COPY client/package.json client/package.json
 COPY --from=server-deps /app/node_modules ./node_modules
 COPY server ./server
+COPY shared ./shared
 COPY --from=client-build /app/client/dist ./client/dist
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod 0555 docker-entrypoint.sh && mkdir -p /data/backups && chown -R node:node /app /data && chmod 0555 /app && chmod 0750 /data /data/backups
