@@ -44,7 +44,7 @@ function safeCoalesced(value) {
 
 /** Whitelist the UI presentation contract so event payload additions cannot expose financial fields. */
 export function sanitizeCelebrationPayload(code, data) {
-  const allowed = payloadFields[code];
+  const allowed = Object.hasOwn(payloadFields, code) ? payloadFields[code] : undefined;
   if (!allowed || !data || typeof data !== 'object' || Array.isArray(data)) return {};
 
   const result = {};
