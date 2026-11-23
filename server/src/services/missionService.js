@@ -102,7 +102,7 @@ export function createMissionService({ repository, facts, config, clock, localDa
           periodKey: String(mission.id), desired: true, value: config.rewards.missions.xp[mission.slot], reasonCode: 'MISSION_COMPLETED' }) : null;
         const xpAwarded = entry?.lifetimeDelta ?? 0;
         if (!repository.closeMission(userId, mission.id, status, cutoff, xpAwarded)) return false;
-        const data = { missionId: mission.id, templateId: mission.templateId, slot: mission.slot, periodKey: mission.periodKey, xpAwarded };
+        const data = { missionId: mission.id, templateId: mission.templateId, slot: mission.slot, periodKey: mission.periodKey, xp: xpAwarded, xpAwarded };
         const eventType = passed ? 'MISSION_COMPLETED' : 'MISSION_EXPIRED';
         publish(eventType, userId, data, `MISSION:${mission.id}:${status}`);
         if (passed) repository.insertActivity({ userId, refId: mission.id, occurredAt: cutoff, data });

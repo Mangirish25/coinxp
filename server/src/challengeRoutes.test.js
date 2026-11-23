@@ -53,6 +53,8 @@ describe('Part 9 MIS-006/007 challenge lifecycle', () => {
     expect(db.prepare('SELECT status,qualifying_days AS qualifyingDays,xp_awarded AS xpAwarded FROM challenge_runs WHERE id=?').get(runId))
       .toMatchObject({ status: 'COMPLETED', qualifyingDays: 14, xpAwarded: 50 });
     expect(db.prepare("SELECT lifetime_delta AS delta FROM xp_ledger WHERE user_id=1 AND entitlement_key='MIS-007:tracking_14' AND entry_type='AWARD'").get().delta).toBe(50);
+    const notice = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=1 AND code='CHALLENGE_COMPLETED'").get();
+    expect(JSON.parse(notice.dataJson)).toMatchObject({ slug: 'tracking_14', qualifyingDays: 14, requiredDays: 13, xp: 50 });
     const details = (await request(app).get(`/api/challenges/runs/${runId}`).set('Cookie', cookie).expect(200)).body;
     expect(details.days).toHaveLength(14);
     expect(details.days.every(({ status, qualified }) => status === 'FINAL' && qualified === 1)).toBe(true);

@@ -59,7 +59,7 @@ export function createShopService({ db, gameEngine, streakService }) {
       } else {
         repository.addCosmetic({ userId, slug: item.slug, purchaseId, acquiredAt: nowIso });
       }
-      const purchase = { id: purchaseId, itemSlug: item.slug, itemType: item.type, costXp: item.costXp,
+      const purchase = { id: purchaseId, itemSlug: item.slug, type: item.type, itemType: item.type, costXp: item.costXp,
         spendableXp: spend.spendableXp, lifetimeXp: spend.lifetimeXp, level: spend.level, effect };
       gameEngine.emitRewardEvent('PURCHASE_COMPLETED', userId, purchase, `PURCHASE:${purchaseId}`);
       repository.insertNotice({ userId, data: purchase, createdAt: nowIso, dedupeKey: `PURCHASE:${purchaseId}:NOTICE` });

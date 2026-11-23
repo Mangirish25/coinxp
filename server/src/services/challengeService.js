@@ -173,7 +173,8 @@ export function createChallengeService({ db, gameEngine }) {
           xpAwarded = entry?.lifetimeDelta ?? 0;
         }
         repository.setStatus(userId, run.id, status, nowIso, xpAwarded);
-        const data = { runId: run.id, challengeSlug: run.challengeSlug, status, qualifyingDays: refreshed.qualifyingDays, requiredDays: run.requiredDays, xpAwarded };
+        const data = { runId: run.id, challengeSlug: run.challengeSlug, slug: run.challengeSlug, status,
+          qualifyingDays: refreshed.qualifyingDays, requiredDays: run.requiredDays, xp: xpAwarded, xpAwarded };
         gameEngine.emitRewardEvent(passed ? 'CHALLENGE_COMPLETED' : 'CHALLENGE_FAILED', userId, data, `CHALLENGE:${run.id}:${status}`);
         repository.insertNotice({ userId, code: `CHALLENGE_${status}`, data, createdAt: nowIso, dedupeKey: `CHALLENGE:${run.id}:NOTICE:${status}` });
         repository.insertActivity({ userId, kind: 'CHALLENGE', id: run.id, status, occurredAt: nowIso, data });

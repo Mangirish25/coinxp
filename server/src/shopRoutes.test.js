@@ -33,6 +33,8 @@ describe('Part 9 XP shop and CR-10/11', () => {
     expect(db.prepare('SELECT lifetime_xp AS lifetimeXp,spendable_xp AS spendableXp,max_level_reached AS level FROM user_progress WHERE user_id=1').get())
       .toMatchObject({ lifetimeXp: 1000, spendableXp: 800, level: 5 });
     expect(db.prepare('SELECT count(*) AS count FROM purchases WHERE user_id=1').get().count).toBe(1);
+    const notice = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=1 AND code='PURCHASE_COMPLETED'").get();
+    expect(JSON.parse(notice.dataJson)).toMatchObject({ itemSlug: 'theme_forest', type: 'THEME', costXp: 200 });
   });
 
   it('CR-11: rolls back an XP spend when the freeze inventory is full', async () => {

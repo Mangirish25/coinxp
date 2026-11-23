@@ -67,5 +67,7 @@ describe('Part 9 MIS-001/MIS-002 mission assignment', () => {
     expect(db.prepare('SELECT status,xp_awarded AS xpAwarded FROM user_missions WHERE id=?').get(missionId)).toMatchObject({ status: 'COMPLETED', xpAwarded: 5 });
     expect(db.prepare("SELECT lifetime_delta AS delta FROM xp_ledger WHERE user_id=1 AND entitlement_key=? AND entry_type='AWARD'").get(`MIS-004:${missionId}`).delta).toBe(5);
     expect(db.prepare("SELECT count(*) AS count FROM user_notices WHERE user_id=1 AND code='MISSION_COMPLETED'").get().count).toBe(1);
+    const notice = db.prepare("SELECT data_json AS dataJson FROM user_notices WHERE user_id=1 AND code='MISSION_COMPLETED'").get();
+    expect(JSON.parse(notice.dataJson)).toMatchObject({ slot: 'DAILY', templateId: 'dm_set_limit', xp: 5 });
   });
 });
