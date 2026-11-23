@@ -5,6 +5,8 @@
 - Keep transaction dates (local calendar dates) separate from UTC record timestamps.
 - Keep XP, streak, and reward numbers in the server rules config. Visual presentation values belong in `client/src/visuals/visuals.config.ts`.
 - Visual specs should be pure and deterministic. Pass data, quality tier, theme and motion mode as inputs; do not hide state in renderers.
+- Add visual controls as stories in `client/src/stories/MotionLab/`; run `npm run storybook --workspace client` and `npm run build-storybook --workspace client` to inspect and build the Motion Lab.
+- Keep visual stories on deterministic fixture data and run the Storybook Accessibility addon; do not connect stories to the live API.
 - Every animated state needs a text/ARIA equivalent. Respect OS reduced motion and user motion settings. Motion must not delay a financial action.
 - Use Lucide icons and procedural SVG; do not add emoji UI.
 - Include the relevant rule ID in new visual, security, or engine tests and commits where practical.

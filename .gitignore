@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+client/storybook-static/
 *.tsbuildinfo
 .env
 *.sqlite

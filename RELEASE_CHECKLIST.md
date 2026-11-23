@@ -11,6 +11,7 @@ Completed Part 10 slices:
 - [x] MOT-003 frame-time sampling is gated to visible animated visuals, recent interaction and a visible tab; low quality suppresses flame ambient extras
 - [x] STR-012 adds a status-driven year heatmap and Monday–Sunday strip with text labels, activity counts, keyboard navigation, and reduced-motion handling
 - [x] STR-012 calendar tooltips include the server-calculated streak length for each settled day and open on focus or tap
+- [x] QA-002/004 Storybook Motion Lab includes flame, medallion and streak calendar controls, with the Accessibility addon enabled
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
