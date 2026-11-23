@@ -41,7 +41,7 @@ export function StreakVisualCalendar({ year, days, week }: { year: number; days:
   });
 
   function moveFocus(event: KeyboardEvent<HTMLButtonElement>, date: string) {
-    const offset = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' ? -7 : event.key === 'ArrowDown' ? 7 : 0;
+    const offset = event.key === 'ArrowLeft' ? -7 : event.key === 'ArrowRight' ? 7 : event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
     if (!offset) return;
     event.preventDefault();
     let index = cells.findIndex((day) => day?.date === date);
@@ -61,7 +61,7 @@ export function StreakVisualCalendar({ year, days, week }: { year: number; days:
           const info = statusInfo[day.status]; const Icon = info.Icon;
           return <li key={day.date} className="min-w-0 text-center">
             <span className="text-xs text-ink-500">{weekdayNames[index]?.slice(0, 2)}</span>
-            <div aria-label={`${day.date}: ${day.provisional ? 'Tracked today, not yet settled' : info.label}`} title={`${day.date}: ${day.provisional ? 'Tracked today, not yet settled' : info.label}`}
+            <div role="img" aria-label={`${day.date}: ${day.provisional ? 'Tracked today, not yet settled' : info.label}`} title={`${day.date}: ${day.provisional ? 'Tracked today, not yet settled' : info.label}`}
               className={`mx-auto mt-1 grid h-10 w-10 place-items-center rounded-full border-2 ${info.className} ${day.provisional ? 'border-dashed' : ''} ${day.status === 'TODAY_OPEN' && effectiveMode === 'FULL' ? 'streak-week-open' : ''}`}>
               <Icon size={18} aria-hidden="true" />
             </div>
@@ -82,25 +82,31 @@ export function StreakVisualCalendar({ year, days, week }: { year: number; days:
             {monthLabels.map((label, index) => <span key={index} className="h-4">{label}</span>)}
           </div>
           <div role="grid" aria-label={`${year} streak calendar; use arrow keys to move between days`}
-            className="mt-1 grid auto-cols-[minmax(0,1fr)] grid-flow-col grid-rows-7 gap-1">
-            {cells.map((day, index) => {
-              if (!day) return <span key={`empty-${index}`} role="presentation" aria-hidden="true" />;
-              const info = statusInfo[day.status]; const Icon = info.Icon;
-              const tooltipOpen = hoveredDate === day.date || focusedDate === day.date || pinnedTooltipDate === day.date;
-              const streakLength = `${day.streakLength} ${day.streakLength === 1 ? 'day' : 'days'} streak`;
-              return <button key={day.date} ref={(node) => { if (node) cellRefs.current.set(day.date, node); else cellRefs.current.delete(day.date); }}
-                type="button" role="gridcell" tabIndex={activeDate === day.date ? 0 : -1} aria-label={`${day.date}: ${info.label}, ${streakLength}`}
-                aria-describedby={tooltipOpen ? `streak-tooltip-${day.date}` : undefined} aria-expanded={tooltipOpen}
-                title={`${day.date}: ${info.label}, ${streakLength}`} onPointerEnter={() => setHoveredDate(day.date)} onPointerLeave={() => setHoveredDate(null)}
-                onFocus={() => { setActiveDate(day.date); setFocusedDate(day.date); }} onBlur={() => setFocusedDate(null)}
-                onClick={() => { setFocusedDate(day.date); setPinnedTooltipDate((current) => current === day.date ? null : day.date); }} onKeyDown={(event) => moveFocus(event, day.date)}
-                className={`relative z-0 grid h-3.5 w-3.5 place-items-center rounded-sm border ${info.className} ${tooltipOpen ? 'z-10' : ''} ${day.status === 'TODAY_OPEN' && effectiveMode === 'FULL' ? 'streak-week-open' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-700`}>
-                <Icon aria-hidden="true" size={9} strokeWidth={2.5} />
-                <span id={`streak-tooltip-${day.date}`} role="tooltip" className={`absolute bottom-full left-1/2 mb-1 -translate-x-1/2 rounded-md bg-ink-950 px-2 py-1 text-[11px] text-white shadow-lg ${tooltipOpen ? 'block' : 'hidden'}`}>
-                  {day.date} · {info.label} · {streakLength}
-                </span>
-              </button>;
-            })}
+            className="mt-1 grid grid-rows-7 gap-1">
+            {weekdayNames.map((weekdayName, weekdayIndex) => <div key={weekdayName} role="row" aria-label={weekdayName}
+              className="grid gap-1" style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }}>
+              {weeks.map((calendarWeek, weekIndex) => {
+                const day = calendarWeek[weekdayIndex];
+                if (!day) return <div key={`empty-${weekIndex}`} role="gridcell" aria-hidden="true" />;
+                const info = statusInfo[day.status]; const Icon = info.Icon;
+                const tooltipOpen = hoveredDate === day.date || focusedDate === day.date || pinnedTooltipDate === day.date;
+                const streakLength = `${day.streakLength} ${day.streakLength === 1 ? 'day' : 'days'} streak`;
+                return <div key={day.date} role="gridcell" className="relative grid place-items-center">
+                  <button ref={(node) => { if (node) cellRefs.current.set(day.date, node); else cellRefs.current.delete(day.date); }}
+                    type="button" tabIndex={activeDate === day.date ? 0 : -1} aria-label={`${day.date}: ${info.label}, ${streakLength}`}
+                    aria-describedby={tooltipOpen ? `streak-tooltip-${day.date}` : undefined} aria-expanded={tooltipOpen}
+                    title={`${day.date}: ${info.label}, ${streakLength}`} onPointerEnter={() => setHoveredDate(day.date)} onPointerLeave={() => setHoveredDate(null)}
+                    onFocus={() => { setActiveDate(day.date); setFocusedDate(day.date); }} onBlur={() => setFocusedDate(null)}
+                    onClick={() => { setFocusedDate(day.date); setPinnedTooltipDate((current) => current === day.date ? null : day.date); }} onKeyDown={(event) => moveFocus(event, day.date)}
+                    className={`relative z-0 grid h-3.5 w-3.5 place-items-center rounded-sm border ${info.className} ${tooltipOpen ? 'z-10' : ''} ${day.status === 'TODAY_OPEN' && effectiveMode === 'FULL' ? 'streak-week-open' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-700`}>
+                    <Icon aria-hidden="true" size={9} strokeWidth={2.5} />
+                    <span id={`streak-tooltip-${day.date}`} role="tooltip" className={`absolute bottom-full left-1/2 mb-1 -translate-x-1/2 rounded-md bg-ink-950 px-2 py-1 text-[11px] text-white shadow-lg ${tooltipOpen ? 'block' : 'hidden'}`}>
+                      {day.date} · {info.label} · {streakLength}
+                    </span>
+                  </button>
+                </div>;
+              })}
+            </div>)}
           </div>
         </div>
       </div>

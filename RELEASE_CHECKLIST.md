@@ -13,6 +13,7 @@ Completed Part 10 slices:
 - [x] STR-012 calendar tooltips include the server-calculated streak length for each settled day and open on focus or tap
 - [x] QA-002/004 Storybook Motion Lab includes flame, medallion and streak calendar controls, with the Accessibility addon enabled
 - [x] QA-003 deterministic desktop and mobile Chromium smoke flows cover protected-route restoration, login/logout, and responsive navigation
+- [x] QA-005 automated axe WCAG checks pass on login, registration, and deterministic flame, medallion, and streak calendar stories
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests

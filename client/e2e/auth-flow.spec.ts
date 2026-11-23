@@ -1,4 +1,43 @@
+import { resolve } from 'node:path';
 import { expect, test } from 'playwright/test';
+
+type AxeResults = {
+  violations: Array<{ id: string; impact: string | null; description: string; nodes: Array<{ target: string[]; failureSummary: string | null }> }>;
+};
+
+declare global {
+  interface Window {
+    axe: { _running?: boolean; run: (context: Document | Element, options: unknown) => Promise<AxeResults> };
+  }
+}
+
+async function expectNoAccessibilityViolations(page: import('playwright/test').Page, scopeSelector?: string) {
+  await page.evaluate(async () => {
+    const finiteAnimations = document.getAnimations().filter((animation) =>
+      animation.effect?.getComputedTiming().endTime !== Infinity,
+    );
+    await Promise.all(finiteAnimations.map((animation) => animation.finished.catch(() => undefined)));
+  });
+  if (scopeSelector) {
+    await page.waitForFunction(() => typeof window.axe?.run === 'function' && !window.axe._running);
+  } else {
+    await page.addScriptTag({ path: resolve(process.cwd(), '../node_modules/axe-core/axe.min.js') });
+  }
+  const results = await page.evaluate((selector) => {
+    const context = selector ? document.querySelector(selector) : document;
+    if (!context) throw new Error(`Accessibility audit root not found: ${selector}`);
+    return window.axe.run(context, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'] },
+    });
+  }, scopeSelector);
+  const violations = results.violations.map((violation) => ({
+    id: violation.id,
+    impact: violation.impact,
+    nodeCount: violation.nodes.length,
+    targets: violation.nodes.slice(0, 3).map((node) => node.target),
+  }));
+  expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
+}
 
 const user = {
   id: 42,
@@ -67,4 +106,27 @@ test('shows the responsive navigation on mobile', async ({ page }, testInfo) => 
   await page.goto('/');
   await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
   await expect(page.getByRole('link', { name: /coinxp/i })).toBeVisible();
+});
+
+test('login and registration forms pass automated WCAG checks', async ({ page }) => {
+  for (const route of ['/login', '/register']) {
+    await page.goto(route);
+    await expect(page.getByRole('main')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expectNoAccessibilityViolations(page);
+  }
+});
+
+test('motion lab flame, medallion, and calendar stories pass automated WCAG checks', async ({ page }) => {
+  const storyIds = [
+    'motion-lab-streak-flame--interactive',
+    'motion-lab-badge-medallion--rare-reveal',
+    'motion-lab-streak-calendar--full-year',
+  ];
+
+  for (const storyId of storyIds) {
+    await page.goto(`http://127.0.0.1:6006/iframe.html?id=${storyId}&viewMode=story`);
+    await expect(page.locator('#storybook-root svg').first()).toBeVisible();
+    await expectNoAccessibilityViolations(page, '#storybook-root');
+  }
 });

@@ -24,10 +24,10 @@ describe('STR-012 week strip and year heatmap', () => {
     expect(screen.getByText('1 counted day · 1 protected day in 2026')).toBeTruthy();
     expect(screen.getByRole('grid', { name: /2026 streak calendar/ })).toBeTruthy();
     expect(screen.getByLabelText('2026-11-21: Tracked today, not yet settled')).toBeTruthy();
-    const firstDay = screen.getByRole('gridcell', { name: '2026-01-01: Counted, 1 day streak' });
-    const secondDay = screen.getByRole('gridcell', { name: '2026-01-02: Protected by freeze, 1 day streak' });
+    const firstDay = screen.getByRole('button', { name: '2026-01-01: Counted, 1 day streak' });
+    const secondDay = screen.getByRole('button', { name: '2026-01-02: Protected by freeze, 1 day streak' });
     firstDay.focus();
-    fireEvent.keyDown(firstDay, { key: 'ArrowRight' });
+    fireEvent.keyDown(firstDay, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(secondDay);
     fireEvent.click(firstDay);
     expect(screen.getByRole('tooltip', { name: '2026-01-01 · Counted · 1 day streak' }).textContent).toContain('2026-01-01 · Counted · 1 day streak');

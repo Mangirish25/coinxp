@@ -18,10 +18,18 @@ export default defineConfig({
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], channel: 'msedge' } },
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'], channel: 'msedge' } },
   ],
-  webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: 'npm run dev -- --host 127.0.0.1 --port 4173',
+      url: 'http://127.0.0.1:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
+      command: 'npm run storybook -- --host 127.0.0.1 --ci',
+      url: 'http://127.0.0.1:6006/index.json',
+      reuseExistingServer: !process.env.CI,
+      timeout: 90_000,
+    },
+  ],
 });

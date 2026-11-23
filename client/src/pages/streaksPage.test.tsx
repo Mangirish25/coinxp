@@ -29,7 +29,7 @@ describe('StreaksPage', () => {
     }));
     render(<QueryClientProvider client={queryClient}><AuthProvider><MemoryRouter><StreaksPage /></MemoryRouter></AuthProvider></QueryClientProvider>);
     await waitFor(() => expect(screen.getByText('3 day tracking streak')).toBeTruthy());
-    expect(screen.getByRole('gridcell', { name: `${first}: Counted, 3 days streak` })).toBeTruthy();
+    expect(screen.getByRole('button', { name: `${first}: Counted, 3 days streak` })).toBeTruthy();
     expect(screen.getByText('Starter freeze earned')).toBeTruthy();
     expect(screen.getByText('7 tracked days')).toBeTruthy();
   });
