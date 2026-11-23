@@ -108,6 +108,42 @@ test('shows the responsive navigation on mobile', async ({ page }, testInfo) => 
   await expect(page.getByRole('link', { name: /coinxp/i })).toBeVisible();
 });
 
+test('keeps transaction errors recoverable on desktop and mobile', async ({ page }) => {
+  let transactionAttempts = 0;
+  await page.unrouteAll();
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+
+    if (path === '/api/auth/me') {
+      await route.fulfill({ status: 200, json: user });
+      return;
+    }
+    if (path === '/api/transactions' && request.method() === 'GET') {
+      transactionAttempts += 1;
+      if (transactionAttempts === 1) {
+        await route.fulfill({ status: 503, json: { error: { code: 'SERVICE_UNAVAILABLE', message: 'Try again.' } } });
+        return;
+      }
+      await route.fulfill({ status: 200, json: { data: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } } });
+      return;
+    }
+    if (path === '/api/categories') {
+      await route.fulfill({ status: 200, json: [] });
+      return;
+    }
+    await route.fulfill({ status: 200, json: {} });
+  });
+
+  await page.goto('/transactions');
+  await expect(page.getByRole('heading', { name: 'Transactions', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Retry');
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(page.getByRole('heading', { name: 'No transactions yet' })).toBeVisible();
+  expect(transactionAttempts).toBeGreaterThanOrEqual(2);
+});
+
 test('login and registration forms pass automated WCAG checks', async ({ page }) => {
   for (const route of ['/login', '/register']) {
     await page.goto(route);
