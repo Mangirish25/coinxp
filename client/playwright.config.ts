@@ -14,10 +14,17 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
   },
-  projects: [
-    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], channel: 'msedge' } },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'], channel: 'msedge' } },
-  ],
+  projects: process.env.CI
+    ? [
+        { name: 'chromium-desktop', use: { ...devices['Desktop Chrome'] } },
+        { name: 'chromium-mobile', use: { ...devices['Pixel 7'] } },
+        { name: 'firefox-desktop', use: { ...devices['Desktop Firefox'] } },
+        { name: 'webkit-mobile', use: { ...devices['iPhone 13'] } },
+      ]
+    : [
+        { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], channel: 'msedge' } },
+        { name: 'mobile-chromium', use: { ...devices['Pixel 7'], channel: 'msedge' } },
+      ],
   webServer: [
     {
       command: 'npm run dev -- --host 127.0.0.1 --port 4173',

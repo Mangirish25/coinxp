@@ -19,8 +19,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm exec --workspace client -- playwright install --with-deps chromium firefox webkit
       - run: npm run lint
       - run: npm test
       - run: npm run build --workspace client
+      - run: npm run test:e2e --workspace client
       - run: npm audit --omit=dev --audit-level=high
       - run: docker build -t coinxp:${{ github.sha }} .

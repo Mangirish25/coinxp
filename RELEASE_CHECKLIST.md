@@ -15,6 +15,7 @@ Completed Part 10 slices:
 - [x] QA-003 deterministic desktop and mobile Chromium smoke flows cover protected-route restoration, login/logout, and responsive navigation
 - [x] QA-005 automated axe WCAG checks pass on login, registration, and deterministic flame, medallion, and streak calendar stories
 - [x] QA-006 deterministic flame, medallion, and full-year calendar screenshot baselines are captured and compared at desktop and mobile sizes
+- [x] QA-007 CI provisions Chromium, Firefox and WebKit and runs the browser smoke and axe checks across desktop/mobile projects
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
