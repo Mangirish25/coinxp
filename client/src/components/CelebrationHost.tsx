@@ -43,7 +43,7 @@ function isTyping() {
 }
 
 export function CelebrationHost({ userId }: { userId: number | null }) {
-  const { preferences: uiPreferences } = useMotionPreferences();
+  const { preferences: uiPreferences, effectiveMode } = useMotionPreferences();
   const seen = useRef(new Set<number>());
   const dialog = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<PlannedCelebration[]>([]);
@@ -72,10 +72,10 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
     const fresh = (pending.data?.data ?? []).filter(({ id }) => !seen.current.has(id));
     if (!fresh.length || items.length || showRecap || preferences.isLoading) return;
     const mutedCategories = (preferences.data?.preferences ?? []).filter(({ enabled }) => !enabled).map(({ category }) => category);
-    const plan = celebrationPlan(fresh, { celebrations: uiPreferences.celebrations, mutedCategories });
+    const plan = celebrationPlan(fresh, { celebrations: effectiveMode === 'OFF' ? 'OFF' : uiPreferences.celebrations, mutedCategories });
     const next = [...plan.fullScreen, ...plan.recap];
     if (next.length) { setItems(next); setIndex(0); setShowRecap(plan.fullScreen.length === 0); }
-  }, [pending.data, preferences.data, preferences.isLoading, items.length, showRecap, uiPreferences.celebrations]);
+  }, [pending.data, preferences.data, preferences.isLoading, items.length, showRecap, uiPreferences.celebrations, effectiveMode]);
 
   const current = items[index];
   const displayed = showRecap ? items.at(-1) : current;
@@ -127,10 +127,12 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
     return typeof value === 'number' && Number.isSafeInteger(value) ? total + value : total;
   }, 0);
   const Icon = displayed.notice.code.startsWith('STREAK') ? Flame : displayed.notice.code === 'BADGE_UNLOCKED' ? Award : Sparkles;
+  const entranceClass = displayed.fullScreen && effectiveMode === 'FULL' ? 'celebration-enter'
+    : displayed.fullScreen && effectiveMode === 'REDUCED' ? 'celebration-enter-reduced' : '';
 
   return <div className="fixed inset-0 z-[70] grid place-items-center bg-ink-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && canSkip) advance(); }}>
     <section ref={dialog} role="dialog" aria-modal="true" aria-labelledby="celebration-title" aria-describedby="celebration-copy" tabIndex={-1}
-      className="w-full max-w-lg rounded-3xl border border-brand-100 bg-white p-7 text-center shadow-2xl motion-safe:animate-[celebration-enter_320ms_ease-out] focus:outline-none sm:p-10">
+      className={`w-full max-w-lg rounded-3xl border border-brand-100 bg-white p-7 text-center shadow-2xl focus:outline-none sm:p-10 ${entranceClass}`}>
       <div aria-hidden="true" className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-brand-50 text-brand-700"><Icon size={38} /></div>
       {showRecap ? <>
         <h2 id="celebration-title" className="mt-5 text-2xl font-semibold">While you were away</h2>

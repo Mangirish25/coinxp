@@ -46,6 +46,9 @@ a {
 @keyframes badge-orbit { to { rotate: 360deg; } }
 @keyframes badge-sheen { 0%, 72%, 100% { filter: drop-shadow(0 0 0 transparent); } 84% { filter: drop-shadow(0 0 4px currentColor); } }
 @keyframes celebration-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.celebration-enter { animation: celebration-enter var(--dur-standard, 320ms) var(--ease-out, ease-out) both; }
+.celebration-enter-reduced { animation: celebration-enter-reduced 160ms ease-out both; }
+@keyframes celebration-enter-reduced { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .streak-flame-svg, .streak-flame-animated, .streak-flame-risk, .streak-flame-settling,
   .streak-flame-halo, .streak-flame-rays, .streak-flame-ember, .badge-medallion-motion,
@@ -53,7 +56,7 @@ a {
   .badge-medallion-tilt { transition: none !important; }
   .badge-medallion-tilt:hover { transform: none !important; }
   .badge-detail-flip { transition: none !important; }
-  .celebration-enter { animation: none !important; }
+  .celebration-enter, .celebration-enter-reduced { animation: none !important; }
 }
 
 @media print {

@@ -20,9 +20,13 @@ describe('NOT-005 bounded celebration planning', () => {
   });
   it('honors muted categories, MAJOR and OFF settings', () => {
     const items = [item(1, 'MISSION_COMPLETED'), item(2, 'BADGE_UNLOCKED', { rarity: 'RARE' }), item(3, 'STREAK_MILESTONE', { milestone: 3 }, 'STREAK')];
-    expect(celebrationPlan(items, { ...all, mutedCategories: ['STREAK'] }).fullScreen.map(({ notice }) => notice.id)).toEqual([2]);
+    const muted = celebrationPlan(items, { ...all, mutedCategories: ['STREAK'] });
+    expect(muted.fullScreen.map(({ notice }) => notice.id)).toEqual([2]);
+    expect(muted.recap.map(({ notice }) => notice.id)).toContain(3);
     expect(celebrationPlan(items, { celebrations: 'MAJOR', mutedCategories: [] }).fullScreen.map(({ notice }) => notice.id)).toEqual([2]);
-    expect(celebrationPlan(items, { celebrations: 'OFF', mutedCategories: [] }).recap).toHaveLength(0);
+    const summaryOnly = celebrationPlan(items, { celebrations: 'OFF', mutedCategories: [] });
+    expect(summaryOnly.fullScreen).toHaveLength(0);
+    expect(summaryOnly.recap.map(({ notice }) => notice.id)).toEqual([1, 2, 3]);
   });
   it('keeps failures and reversals calm and excludes untrusted money fields from totals', () => {
     const plan = celebrationPlan([item(1, 'STREAK_BROKEN', { amount: 90000, xp: 0 }, 'STREAK'), item(2, 'XP_REVERSED_LIMIT', { balance: 500, xpDelta: -5 }, 'XP_CHANGE')], all);

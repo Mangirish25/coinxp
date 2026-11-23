@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CelebrationHost } from './CelebrationHost';
 
 describe('NOT-005 celebration host', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it('shows a text recap, acknowledges it, and does not expose financial fields', async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -40,6 +40,24 @@ describe('NOT-005 celebration host', () => {
     render(<QueryClientProvider client={client}><CelebrationHost userId={1} /></QueryClientProvider>);
     expect(await screen.findByRole('dialog', { name: 'Level 2 · Budget Explorer' })).toBeTruthy();
     expect(screen.getByText('Level 1 to 2. Your title changed from Beginner to Budget Explorer.')).toBeTruthy();
+    client.clear();
+  });
+
+  it('NOT-005: keeps muted reward notices readable in the static recap', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request) => {
+      if (String(_url).includes('/api/notifications/preferences')) return { ok: true, status: 200, json: async () => ({ preferences: [{ category: 'REWARD', enabled: false }] }) } as Response;
+      if (String(_url).includes('/api/celebrations/claim')) return { ok: true, status: 200, json: async () => ({ data: [
+        { id: 11, kind: 'REWARD', code: 'MISSION_COMPLETED', createdAt: '2026-11-23T00:00:00.000Z', data: { xp: 10 } },
+      ] }) } as Response;
+      return { ok: true, status: 200, json: async () => ({ acknowledgedThrough: 11 }) } as Response;
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><CelebrationHost userId={1} /></QueryClientProvider>);
+    expect(await screen.findByRole('dialog', { name: 'While you were away' })).toBeTruthy();
+    expect(screen.getByText('You completed a mission.')).toBeTruthy();
+    expect(screen.getByRole('dialog').className).not.toContain('celebration-enter');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     client.clear();
   });
 });

@@ -53,14 +53,15 @@ function durationFor(notice: CelebrationNotice) {
 
 /** NOT-005: plans are deterministic, bounded and never give negative events a festive takeover. */
 export function celebrationPlan(items: CelebrationNotice[], prefs: CelebrationPreferences) {
-  const filtered = items.filter((item) => !prefs.mutedCategories.includes(item.kind));
-  const visible = prefs.celebrations === 'OFF' ? [] : filtered;
-  const eligible = visible.filter((item) => prefs.celebrations === 'ALL' || canTakeOver(item));
-  const sortedByPriority = [...eligible].filter(canTakeOver).sort((a, b) => eventPriority(b) - eventPriority(a) || a.id - b.id);
+  const visible = [...items];
+  const animationEligible = prefs.celebrations === 'OFF'
+    ? []
+    : visible.filter((item) => !prefs.mutedCategories.includes(item.kind));
+  const sortedByPriority = animationEligible.filter(canTakeOver).sort((a, b) => eventPriority(b) - eventPriority(a) || a.id - b.id);
   const selected = new Set(sortedByPriority.slice(0, celebration.maxFullScreenPerRecap).map(({ id }) => id));
   let totalMs = 0;
   const ordered = [...visible].sort((a, b) => a.id - b.id).map((notice): PlannedCelebration => {
-    let fullScreen = selected.has(notice.id);
+    let fullScreen = selected.has(notice.id) && !prefs.mutedCategories.includes(notice.kind) && prefs.celebrations !== 'OFF';
     const durationMs = durationFor(notice);
     if (fullScreen && totalMs + durationMs > celebration.maxSequenceMs) fullScreen = false;
     if (fullScreen) totalMs += durationMs + celebration.gapMs;
