@@ -1,3 +1,5 @@
+import bundleBudgets from './bundleBudgets.json';
+
 export const motionTokens = {
   duration: { instant: 80, micro: 120, quick: 200, standard: 320, emphasis: 560 },
   celebration: { small: 1200, medium: 2000, large: 2800, max: 3600 },
@@ -47,7 +49,7 @@ export const celebration = {
 export const sampler = { windowMs: 2000, downgradeFrameMs: 24, upgradeFrameMs: 14, minDwellMs: 10000 } as const;
 
 export const visualBudgets = {
-  initialJsGzipKb: 220, visualsChunkGzipKb: 90, routeChunkGzipKb: 120,
+  ...bundleBudgets,
   lcpMs: 2500, inpMs: 200, cls: 0.1, minFpsHigh: 55, longTaskMs: 50,
 } as const;
 

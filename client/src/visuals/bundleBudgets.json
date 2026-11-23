@@ -1,0 +1,7 @@
+{
+  "initialJsGzipKb": 220,
+  "visualsChunkGzipKb": 90,
+  "routeChunkGzipKb": 120,
+  "vendorChunkGzipKb": 180,
+  "cssGzipKb": 32
+}
