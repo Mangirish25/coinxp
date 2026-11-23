@@ -43,6 +43,21 @@ describe('Part 7 streak API', () => {
     await request(app).get('/api/streaks/rules').set('Cookie', cookie).expect(200);
   });
 
+  it('STR-012 returns the settled streak length for counted and frozen calendar days', async () => {
+    const userId = db.prepare('SELECT id FROM users WHERE email=?').get('streak-api@example.com').id;
+    const runId = db.prepare(`INSERT INTO streak_runs(user_id,streak_type,started_key,created_at)
+      VALUES(?,'TRACKING_DAILY','2026-11-10','2026-11-13T12:00:00.000Z')`).run(userId).lastInsertRowid;
+    const insert = db.prepare(`INSERT INTO streak_periods(user_id,streak_type,period_key,status,run_id,reason_code,processed_at)
+      VALUES(?,'TRACKING_DAILY',?,?,?,'SETTLED','2026-11-13T12:00:00.000Z')`);
+    insert.run(userId, '2026-11-10', 'COUNTED', runId);
+    insert.run(userId, '2026-11-11', 'FROZEN', runId);
+    insert.run(userId, '2026-11-12', 'COUNTED', runId);
+    const response = await request(app).get('/api/streaks/tracking/calendar?from=2026-11-10&to=2026-11-13').set('Cookie', cookie).expect(200);
+    expect(response.body.days.map(({ status, streakLength }) => [status, streakLength])).toEqual([
+      ['COUNTED', 1], ['FROZEN', 1], ['COUNTED', 2], ['TODAY_OPEN', 0],
+    ]);
+  });
+
   it('handles parallel summary requests without duplicating periods or milestone XP', async () => {
     const userId = db.prepare('SELECT id FROM users WHERE email=?').get('streak-api@example.com').id;
     db.prepare('UPDATE user_progress SET gamification_start_date=? WHERE user_id=?').run('2026-11-01', userId);

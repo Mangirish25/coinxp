@@ -259,17 +259,20 @@ export function createStreakAdvancer({ db, gameEngine, config = defaultRules, cl
     const rows = streaks.calendar(userId, from, to);
     const byDate = new Map();
     for (const row of rows) {
-      if (!byDate.has(row.periodKey)) byDate.set(row.periodKey, {});
-      byDate.get(row.periodKey)[row.streakType] = row.status;
+      if (!byDate.has(row.periodKey)) byDate.set(row.periodKey, { secondary: {}, streakLength: 0 });
+      const detail = byDate.get(row.periodKey);
+      detail.secondary[row.streakType] = row.status;
+      if (row.streakType === TRACKING) detail.streakLength = row.streakLength;
     }
     const today = gameEngine.localDate(userId, clock.now());
     const dates = [];
     for (let date = from; date <= to; date = shiftDate(date, config.units.one)) {
       const daySettlement = settlements.get(userId, 'day', date);
-      let status = byDate.get(date)?.[TRACKING] ?? 'NONE';
+      const detail = byDate.get(date);
+      let status = detail?.secondary[TRACKING] ?? 'NONE';
       if (status === 'NONE' && date === today && !daySettlement) status = 'TODAY_OPEN';
       if (status === 'NONE' && daySettlement?.details?.noSpendDeclared && !daySettlement.details.xpTracked) status = 'DECLARED_CAPPED';
-      dates.push({ date, status, secondary: byDate.get(date) ?? {} });
+      dates.push({ date, status, secondary: detail?.secondary ?? {}, streakLength: detail?.streakLength ?? 0 });
     }
     return { from, to, days: dates };
   }

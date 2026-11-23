@@ -82,8 +82,14 @@ export function createStreakRepository(db) {
         VALUES(?,?,?,?,?,?)`).run(userId, streakType, milestone, reachedKey, runId, createdAt).changes > 0;
     },
     calendar(userId, from, to) {
-      return db.prepare(`SELECT streak_type AS streakType,period_key AS periodKey,status,reason_code AS reasonCode
-        FROM streak_periods WHERE user_id=? AND period_key>=? AND period_key<=? ORDER BY period_key,streak_type`).all(userId, from, to);
+      return db.prepare(`SELECT p.streak_type AS streakType,p.period_key AS periodKey,p.status,p.reason_code AS reasonCode,
+        CASE WHEN p.streak_type='TRACKING_DAILY' AND p.status IN ('COUNTED','FROZEN') AND p.run_id IS NOT NULL
+          THEN COALESCE(r.length_offset,0)+(SELECT count(*) FROM streak_periods counted
+            WHERE counted.user_id=p.user_id AND counted.streak_type=p.streak_type AND counted.run_id=p.run_id
+              AND counted.status='COUNTED' AND counted.period_key<=p.period_key)
+          ELSE 0 END AS streakLength
+        FROM streak_periods p LEFT JOIN streak_runs r ON r.id=p.run_id AND r.user_id=p.user_id
+        WHERE p.user_id=? AND p.period_key>=? AND p.period_key<=? ORDER BY p.period_key,p.streak_type`).all(userId, from, to);
     },
   };
 }

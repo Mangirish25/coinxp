@@ -22,14 +22,14 @@ describe('StreaksPage', () => {
         : url.endsWith('/api/streaks')
           ? { tracking: { status: 'ACTIVE', current: 3, longest: 7, trackedToday: true, atRisk: false, freezeWouldProtect: true, settlingDate: null, nextMilestone: { days: 7, xp: 25 }, milestones: [3], comeback: null }, secondary: {}, freezes: { inventory: 1, cap: 2 }, through: date, recentEvents: [], week: [], lastPeriod: { date, status: 'COUNTED' }, milestones: { reached: [3], next: { days: 7, xp: 25 } } }
           : url.includes('/tracking/calendar')
-            ? { from: first, to: url.match(/to=([^&]+)/)?.[1], days: [{ date: first, status: 'COUNTED', secondary: {} }] }
+            ? { from: first, to: url.match(/to=([^&]+)/)?.[1], days: [{ date: first, status: 'COUNTED', secondary: {}, streakLength: 3 }] }
             : url.includes('/freezes') ? { inventory: 1, cap: 2, data: [{ id: 1, delta: 1, reason: 'STARTER', effectiveAt: '2026-01-03T00:00:00.000Z', effectiveLocalDate: first, message: 'Starter freeze earned' }], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } }
               : { tracking: { milestones: [{ days: 3, xp: 10 }, { days: 7, xp: 25 }] } };
       return { ok: true, status: 200, json: async () => body };
     }));
     render(<QueryClientProvider client={queryClient}><AuthProvider><MemoryRouter><StreaksPage /></MemoryRouter></AuthProvider></QueryClientProvider>);
     await waitFor(() => expect(screen.getByText('3 day tracking streak')).toBeTruthy());
-    expect(screen.getByRole('gridcell', { name: `${first}: Counted` })).toBeTruthy();
+    expect(screen.getByRole('gridcell', { name: `${first}: Counted, 3 days streak` })).toBeTruthy();
     expect(screen.getByText('Starter freeze earned')).toBeTruthy();
     expect(screen.getByText('7 tracked days')).toBeTruthy();
   });

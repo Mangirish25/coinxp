@@ -5,9 +5,9 @@ import { StreakVisualCalendar } from './StreakVisualCalendar';
 
 describe('STR-012 week strip and year heatmap', () => {
   const days = [
-    { date: '2026-01-01', status: 'COUNTED' as const, secondary: {} },
-    { date: '2026-01-02', status: 'FROZEN' as const, secondary: {} },
-    { date: '2026-01-03', status: 'EXEMPT' as const, secondary: {} },
+    { date: '2026-01-01', status: 'COUNTED' as const, secondary: {}, streakLength: 1 },
+    { date: '2026-01-02', status: 'FROZEN' as const, secondary: {}, streakLength: 1 },
+    { date: '2026-01-03', status: 'EXEMPT' as const, secondary: {}, streakLength: 0 },
   ];
   const week = [
     { date: '2026-11-16', status: 'COUNTED' as const, secondary: {}, provisional: false },
@@ -24,11 +24,13 @@ describe('STR-012 week strip and year heatmap', () => {
     expect(screen.getByText('1 counted day · 1 protected day in 2026')).toBeTruthy();
     expect(screen.getByRole('grid', { name: /2026 streak calendar/ })).toBeTruthy();
     expect(screen.getByLabelText('2026-11-21: Tracked today, not yet settled')).toBeTruthy();
-    const firstDay = screen.getByRole('gridcell', { name: '2026-01-01: Counted' });
-    const secondDay = screen.getByRole('gridcell', { name: '2026-01-02: Protected by freeze' });
+    const firstDay = screen.getByRole('gridcell', { name: '2026-01-01: Counted, 1 day streak' });
+    const secondDay = screen.getByRole('gridcell', { name: '2026-01-02: Protected by freeze, 1 day streak' });
     firstDay.focus();
     fireEvent.keyDown(firstDay, { key: 'ArrowRight' });
     expect(document.activeElement).toBe(secondDay);
+    fireEvent.click(firstDay);
+    expect(screen.getByRole('tooltip', { name: '2026-01-01 · Counted · 1 day streak' }).textContent).toContain('2026-01-01 · Counted · 1 day streak');
     expect(screen.getByLabelText('Streak calendar legend')).toBeTruthy();
   });
 });

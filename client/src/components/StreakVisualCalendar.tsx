@@ -31,6 +31,9 @@ export function StreakVisualCalendar({ year, days, week }: { year: number; days:
   const cellRefs = useRef(new Map<string, HTMLButtonElement>());
   const { cells, weeks } = useMemo(() => weekCells(days, year), [days, year]);
   const [activeDate, setActiveDate] = useState(days[0]?.date ?? '');
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const [focusedDate, setFocusedDate] = useState<string | null>(null);
+  const [pinnedTooltipDate, setPinnedTooltipDate] = useState<string | null>(null);
   useEffect(() => setActiveDate(days[0]?.date ?? ''), [days]);
   const monthLabels = weeks.map((_week, column) => {
     const date = cells.slice(column * 7, column * 7 + 7).find((day) => day?.date.endsWith('-01'))?.date;
@@ -83,11 +86,19 @@ export function StreakVisualCalendar({ year, days, week }: { year: number; days:
             {cells.map((day, index) => {
               if (!day) return <span key={`empty-${index}`} role="presentation" aria-hidden="true" />;
               const info = statusInfo[day.status]; const Icon = info.Icon;
+              const tooltipOpen = hoveredDate === day.date || focusedDate === day.date || pinnedTooltipDate === day.date;
+              const streakLength = `${day.streakLength} ${day.streakLength === 1 ? 'day' : 'days'} streak`;
               return <button key={day.date} ref={(node) => { if (node) cellRefs.current.set(day.date, node); else cellRefs.current.delete(day.date); }}
-                type="button" role="gridcell" tabIndex={activeDate === day.date ? 0 : -1} aria-label={`${day.date}: ${info.label}`}
-                title={`${day.date}: ${info.label}`} onFocus={() => setActiveDate(day.date)} onKeyDown={(event) => moveFocus(event, day.date)}
-                className={`grid h-3.5 w-3.5 place-items-center rounded-sm border ${info.className} ${day.status === 'TODAY_OPEN' && effectiveMode === 'FULL' ? 'streak-week-open' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-700`}>
+                type="button" role="gridcell" tabIndex={activeDate === day.date ? 0 : -1} aria-label={`${day.date}: ${info.label}, ${streakLength}`}
+                aria-describedby={tooltipOpen ? `streak-tooltip-${day.date}` : undefined} aria-expanded={tooltipOpen}
+                title={`${day.date}: ${info.label}, ${streakLength}`} onPointerEnter={() => setHoveredDate(day.date)} onPointerLeave={() => setHoveredDate(null)}
+                onFocus={() => { setActiveDate(day.date); setFocusedDate(day.date); }} onBlur={() => setFocusedDate(null)}
+                onClick={() => { setFocusedDate(day.date); setPinnedTooltipDate((current) => current === day.date ? null : day.date); }} onKeyDown={(event) => moveFocus(event, day.date)}
+                className={`relative z-0 grid h-3.5 w-3.5 place-items-center rounded-sm border ${info.className} ${tooltipOpen ? 'z-10' : ''} ${day.status === 'TODAY_OPEN' && effectiveMode === 'FULL' ? 'streak-week-open' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-700`}>
                 <Icon aria-hidden="true" size={9} strokeWidth={2.5} />
+                <span id={`streak-tooltip-${day.date}`} role="tooltip" className={`absolute bottom-full left-1/2 mb-1 -translate-x-1/2 rounded-md bg-ink-950 px-2 py-1 text-[11px] text-white shadow-lg ${tooltipOpen ? 'block' : 'hidden'}`}>
+                  {day.date} · {info.label} · {streakLength}
+                </span>
               </button>;
             })}
           </div>

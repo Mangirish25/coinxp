@@ -25,7 +25,7 @@ export interface StreakSummary {
 export interface StreakCalendar {
   from: string;
   to: string;
-  days: Array<{ date: string; status: StreakPeriodStatus; secondary: Record<string, string> }>;
+  days: Array<{ date: string; status: StreakPeriodStatus; secondary: Record<string, string>; streakLength: number }>;
 }
 
 export interface FreezeHistory {
