@@ -92,6 +92,13 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
     returnFocus.current = null;
   }, [displayed]);
 
+  useEffect(() => {
+    if (!displayed || suspended) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [displayed, suspended]);
+
   async function finish() {
     for (const item of items) seen.current.add(item.notice.id);
     const high = Math.max(...items.map(({ notice }) => notice.id));

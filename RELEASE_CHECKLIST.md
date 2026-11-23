@@ -7,7 +7,7 @@ Completed Part 10 slices:
 - [x] Badge, level-up, streak, mission, challenge, purchase, and day recap notices carry presentation payloads without financial data
 - [x] Atomic per-notice celebration claims prevent simultaneous devices from starting the same sequence; expired claims can be recovered
 - [x] Muted notices and disabled celebrations remain visible in a static progress recap instead of being discarded
-- [x] Celebration dialogs focus Skip when it becomes available and return focus to the trigger on close
+- [x] Celebration dialogs focus Skip when it becomes available, lock background scrolling, and return focus to the trigger on close
 - [x] MOT-003 frame-time sampling is gated to visible animated visuals, recent interaction and a visible tab; low quality suppresses flame ambient extras
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
