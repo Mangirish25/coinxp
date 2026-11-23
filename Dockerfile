@@ -10,6 +10,7 @@ COPY server/package.json server/package.json
 RUN npm ci
 COPY client ./client
 COPY server ./server
+COPY shared ./shared
 RUN npm run build --workspace client
 
 FROM ${NODE_IMAGE} AS server-deps
