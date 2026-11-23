@@ -2,6 +2,13 @@
 
 This checklist is intentionally not signed. Part 10 is incomplete.
 
+Completed Part 10 slices:
+
+- [x] Badge, level-up, streak, mission, challenge, purchase, and day recap notices carry presentation payloads without financial data
+- [x] Atomic per-notice celebration claims prevent simultaneous devices from starting the same sequence; expired claims can be recovered
+- [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
+- [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
+
 - [x] Production same-origin cookie/header/origin baseline groundwork
 - [x] Readiness endpoint checks database and migrations
 - [x] In-memory server and client unit/component suites pass
