@@ -40,6 +40,7 @@ export function BadgesPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [collectionFilter, setCollectionFilter] = useState<'ALL' | 'EARNED' | 'LOCKED'>('ALL');
+  const [showingTiers, setShowingTiers] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -61,6 +62,10 @@ export function BadgesPage() {
     const matchesCollection = collectionFilter === 'ALL' || (collectionFilter === 'EARNED' ? earned : !earned);
     return matchesSearch && matchesCategory && matchesCollection;
   });
+  function openBadge(badge: BadgeFamily) {
+    setShowingTiers(false);
+    setSelected(badge);
+  }
   return <section className="mx-auto max-w-6xl space-y-6">
     <header><p className="text-sm font-medium text-brand-600">Small wins, built over time</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Badges</h1><p className="mt-2 max-w-2xl text-sm text-ink-500">Badges come from recorded habits and settled progress. Earned badges stay in your collection.</p></header>
     {catalog.isLoading && <div aria-label="Loading badges" className="grid gap-4 md:grid-cols-2"><div className="h-60 animate-pulse motion-reduce:animate-none rounded-2xl bg-white" /><div className="h-60 animate-pulse motion-reduce:animate-none rounded-2xl bg-white" /></div>}
@@ -74,15 +79,24 @@ export function BadgesPage() {
       {catalog.data.hiddenRemaining > 0 && <p className="flex items-center gap-2 rounded-xl border bg-white p-4 text-sm"><LockKeyhole size={16} aria-hidden="true" />{catalog.data.hiddenRemaining} hidden {catalog.data.hiddenRemaining === 1 ? 'badge remains' : 'badges remain'} undiscovered.</p>}
       {catalog.data.data.length === 0 && <p className="rounded-2xl border bg-white p-6 text-sm text-ink-600">Your badge collection will grow as you build steady money habits.</p>}
       {catalog.data.data.length > 0 && visibleBadges.length === 0 && <p role="status" className="rounded-2xl border bg-white p-6 text-sm text-ink-600">No badges match those filters. Try a different search or category.</p>}
-      {categories.filter((category) => visibleBadges.some((badge) => badge.category === category)).map((category) => <section key={category} aria-labelledby={`badge-${category}`}><h2 id={`badge-${category}`} className="mb-3 text-lg font-semibold">{categoryLabels[category] ?? category}</h2><div className="grid gap-4 lg:grid-cols-2">{visibleBadges.filter((badge) => badge.category === category).map((badge) => <BadgeCard key={badge.slug} badge={badge} onSelect={setSelected} />)}</div></section>)}
+      {categories.filter((category) => visibleBadges.some((badge) => badge.category === category)).map((category) => <section key={category} aria-labelledby={`badge-${category}`}><h2 id={`badge-${category}`} className="mb-3 text-lg font-semibold">{categoryLabels[category] ?? category}</h2><div className="grid gap-4 lg:grid-cols-2">{visibleBadges.filter((badge) => badge.category === category).map((badge) => <BadgeCard key={badge.slug} badge={badge} onSelect={openBadge} />)}</div></section>)}
     </>}
-    <dialog ref={dialogRef} aria-label={selected ? `${titleFor(selected.slug)} badge details` : 'Badge details'} className="w-[min(94vw,38rem)] rounded-3xl p-0 shadow-2xl backdrop:bg-ink-900/50" onClose={() => setSelected(null)} onCancel={() => setSelected(null)}>
-      {selected && <div className="relative p-6 sm:p-8"><button type="button" autoFocus onClick={() => setSelected(null)} aria-label="Close badge details" className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full hover:bg-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700"><X aria-hidden="true" /></button>
-        <div className="flex flex-col items-center text-center"><BadgeMedallion badge={selected} tier={selected.tiers.find(({ status }) => status === 'ACTIVE') ?? selected.tiers[0]} size="xl" state={selected.tiers.some(({ status }) => status === 'ACTIVE') ? 'UNLOCKED' : 'LOCKED'} />
-          <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-brand-700">{categoryLabels[selected.category] ?? selected.category}</p><h2 className="mt-1 text-2xl font-semibold">{titleFor(selected.slug)}</h2>
-          <p className="mt-2 max-w-md text-sm text-ink-600">Progress comes from verified tracking and settled activity. Badge unlocks stay earned unless reviewed by an administrator.</p>
+    <dialog ref={dialogRef} aria-label={selected ? `${titleFor(selected.slug)} badge details` : 'Badge details'} className="w-[min(94vw,38rem)] rounded-3xl p-0 shadow-2xl backdrop:bg-ink-900/50" onClose={() => { setSelected(null); setShowingTiers(false); }} onCancel={() => { setSelected(null); setShowingTiers(false); }}>
+      {selected && <div className="relative p-6 sm:p-8"><button type="button" autoFocus onClick={() => setSelected(null)} aria-label="Close badge details" className="absolute right-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-full bg-white hover:bg-canvas focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700"><X aria-hidden="true" /></button>
+        <div className={`badge-detail-flip${showingTiers ? ' is-flipped' : ''}`}>
+          <section aria-hidden={showingTiers} className="badge-detail-face flex flex-col items-center text-center">
+            <BadgeMedallion badge={selected} tier={selected.tiers.find(({ status }) => status === 'ACTIVE') ?? selected.tiers[0]} size="xl" state={selected.tiers.some(({ status }) => status === 'ACTIVE') ? 'UNLOCKED' : 'LOCKED'} />
+            <p className="mt-4 text-xs font-semibold uppercase tracking-widest text-brand-700">{categoryLabels[selected.category] ?? selected.category}</p><h2 className="mt-1 text-2xl font-semibold">{titleFor(selected.slug)}</h2>
+            <p className="mt-2 max-w-md text-sm text-ink-600">Progress comes from verified tracking and settled activity. Badge unlocks stay earned unless reviewed by an administrator.</p>
+          </section>
+          <section aria-hidden={!showingTiers} className="badge-detail-face badge-detail-face-back" aria-label={`${titleFor(selected.slug)} tier details`}>
+            <h2 className="mb-4 pr-10 text-xl font-semibold">{titleFor(selected.slug)} tiers</h2>
+            <ol className="space-y-2">{selected.tiers.map((tier) => <li key={tier.tier} className="flex items-center justify-between gap-2 rounded-xl bg-canvas px-3 py-3 text-sm"><span className="flex items-center gap-2"><BadgeMedallion badge={selected} tier={tier} size="sm" />{['Bronze', 'Silver', 'Gold', 'Platinum'][tier.tier - 1] ?? `Tier ${tier.tier}`} · {tier.rarity.toLowerCase()}</span><span className="text-right">{tier.status === 'ACTIVE' ? `Earned ${tier.achievedOn ?? ''}` : `${tier.threshold} ${selected.metric.toLowerCase().replaceAll('_', ' ')}`}</span></li>)}</ol>
+          </section>
         </div>
-        <ol className="mt-6 space-y-2" aria-label={`${titleFor(selected.slug)} tier details`}>{selected.tiers.map((tier) => <li key={tier.tier} className="flex items-center justify-between rounded-xl bg-canvas px-4 py-3 text-sm"><span><BadgeMedallion badge={selected} tier={tier} size="sm" /> <span>{['Bronze', 'Silver', 'Gold', 'Platinum'][tier.tier - 1] ?? `Tier ${tier.tier}`} · {tier.rarity.toLowerCase()}</span></span><span>{tier.status === 'ACTIVE' ? `Earned ${tier.achievedOn ?? ''}` : `${tier.threshold} ${selected.metric.toLowerCase().replaceAll('_', ' ')}`}</span></li>)}</ol>
+        <button type="button" aria-pressed={showingTiers} onClick={() => setShowingTiers((value) => !value)} className="mt-6 min-h-11 w-full rounded-xl border px-4 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-700">
+          {showingTiers ? 'Show badge artwork' : 'Show tier details'}
+        </button>
       </div>}
     </dialog>
   </section>;

@@ -30,6 +30,12 @@ describe('BadgesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /View First Step, Bronze, common/ }));
     expect(await screen.findByRole('dialog', { name: 'First Step badge details' })).toBeTruthy();
     expect(screen.getAllByRole('img', { name: 'First Step, Bronze, common' }).length).toBeGreaterThan(0);
+    const flipButton = screen.getByRole('button', { name: 'Show tier details' });
+    fireEvent.click(flipButton);
+    expect(screen.getByRole('button', { name: 'Show badge artwork' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('heading', { name: 'First Step tiers' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show badge artwork' }));
+    expect(screen.getByRole('button', { name: 'Show tier details' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.queryByText(/comeback|fresh start/i)).toBeNull();
   });
 });
