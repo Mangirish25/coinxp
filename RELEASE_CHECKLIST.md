@@ -17,6 +17,7 @@ Completed Part 10 slices:
 - [x] QA-006 deterministic flame, medallion, and full-year calendar screenshot baselines are captured and compared at desktop and mobile sizes
 - [x] QA-007 CI provisions Chromium, Firefox and WebKit and runs the browser smoke and axe checks across desktop/mobile projects
 - [x] QA-008 repeating CSS and dynamic flame cycles have an automated minimum-duration guard against motion above three cycles per second
+- [x] Playwright recovery flow verifies transaction load errors can be retried on desktop and mobile while navigation remains available
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
@@ -33,7 +34,7 @@ Completed Part 10 slices:
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
 - [ ] UI state coverage for offline/partial failure at all screen sizes
 - [x] Storybook Motion Lab and visual regression baselines for the three dynamic visuals
-- [ ] Playwright end-to-end flows and multi-browser smoke tests
+- [x] Playwright end-to-end flows and multi-browser smoke tests (desktop/mobile Chromium, desktop Firefox, mobile WebKit in CI)
 - [ ] axe, contrast matrix, screen-reader and flash-rate review
 - [ ] Lighthouse, frame-time, memory leak and final bundle-budget gates
 - [ ] Nightly encrypted off-host backup, retention, restore check, and rehearsed recovery
