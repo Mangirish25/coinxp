@@ -28,11 +28,13 @@ a {
 .streak-flame-halo { transform-origin: 50px 51px; animation: flame-halo 5s linear infinite; }
 .streak-flame-rays { transform-origin: 50px 50px; animation: flame-halo 20s linear infinite; }
 .streak-flame-ember { animation: flame-ember 1600ms ease-out var(--ember-delay) infinite; }
+.streak-week-open { animation: streak-open 1600ms ease-out infinite; }
 @keyframes flame-flicker { from { transform: scale(var(--flame-scale)) skewX(-1deg); } to { transform: scale(calc(var(--flame-scale) * 1.025)) skewX(1deg); } }
 @keyframes flame-risk { from { transform: translateX(-1px) scale(var(--flame-scale)); } to { transform: translateX(1px) scale(var(--flame-scale)); } }
 @keyframes flame-settle { from { opacity: .78; } to { opacity: 1; } }
 @keyframes flame-halo { to { transform: rotate(360deg); } }
 @keyframes flame-ember { from { opacity: 0; transform: translateY(8px); } 35% { opacity: .9; } to { opacity: 0; transform: translateY(-8px); } }
+@keyframes streak-open { from { box-shadow: 0 0 0 0 rgb(13 148 136 / 42%); } to { box-shadow: 0 0 0 4px rgb(13 148 136 / 0%); } }
 .badge-medallion-motion .badge-orbit { transform-box: fill-box; transform-origin: center; animation: badge-orbit 8s linear infinite; }
 .badge-medallion-sheen { animation: badge-sheen 6s ease-in-out infinite; }
 .badge-medallion-tilt { transition: transform var(--dur-standard, 320ms) ease-out; transform-style: preserve-3d; }
@@ -52,7 +54,7 @@ a {
 @media (prefers-reduced-motion: reduce) {
   .streak-flame-svg, .streak-flame-animated, .streak-flame-risk, .streak-flame-settling,
   .streak-flame-halo, .streak-flame-rays, .streak-flame-ember, .badge-medallion-motion,
-  .badge-medallion-sheen, .badge-orbit { animation: none !important; }
+  .badge-medallion-sheen, .badge-orbit, .streak-week-open { animation: none !important; }
   .badge-medallion-tilt { transition: none !important; }
   .badge-medallion-tilt:hover { transform: none !important; }
   .badge-detail-flip { transition: none !important; }
