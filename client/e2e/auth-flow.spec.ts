@@ -1,0 +1,70 @@
+import { expect, test } from 'playwright/test';
+
+const user = {
+  id: 42,
+  email: 'smoke@example.test',
+  displayName: 'Smoke Tester',
+  timezone: 'Asia/Kolkata',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+
+    if (path === '/api/auth/me') {
+      await route.fulfill({ status: 401, json: { error: { code: 'UNAUTHENTICATED', message: 'Sign in required.' } } });
+      return;
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') {
+      await route.fulfill({ status: 200, json: user });
+      return;
+    }
+    if (path === '/api/auth/logout' && request.method() === 'POST') {
+      await route.fulfill({ status: 204, body: '' });
+      return;
+    }
+    if (path === '/api/transactions/unexpected-quota') {
+      await route.fulfill({ status: 200, json: { month: '2026-01', quota: 3, used: 0, remaining: 3, enabled: true } });
+      return;
+    }
+    if (path === '/api/transactions') {
+      await route.fulfill({
+        status: 200,
+        json: { data: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
+      });
+      return;
+    }
+    if (path === '/api/categories') {
+      await route.fulfill({ status: 200, json: [] });
+      return;
+    }
+    await route.fulfill({ status: 200, json: {} });
+  });
+});
+
+test('preserves a protected destination through login and logout', async ({ page }) => {
+  await page.goto('/transactions');
+  await expect(page.getByRole('heading', { name: 'Sign in to CoinXP' })).toBeVisible();
+
+  await page.getByLabel('Email').fill(user.email);
+  await page.locator('#login-password').fill('Secure123!');
+  await page.getByRole('button', { name: /sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/transactions$/);
+  await expect(page.getByRole('heading', { name: 'Transactions', exact: true })).toBeVisible();
+  await expect(page.getByText(user.displayName)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Log out' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'Sign in to CoinXP' })).toBeVisible();
+});
+
+test('shows the responsive navigation on mobile', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'This assertion is intended for the mobile Chromium project.');
+
+  await page.goto('/');
+  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /coinxp/i })).toBeVisible();
+});
