@@ -17,6 +17,7 @@ Completed Part 10 slices:
 - [x] QA-006 deterministic flame, medallion, and full-year calendar screenshot baselines are captured and compared at desktop and mobile sizes
 - [x] QA-007 CI provisions Chromium, Firefox and WebKit and runs the browser smoke and axe checks across desktop/mobile projects
 - [x] QA-008 repeating CSS and dynamic flame cycles have an automated minimum-duration guard against motion above three cycles per second
+- [x] Playwright verifies operating-system reduced-motion disables animated flame and badge medallion effects on desktop and mobile Chromium
 - [x] Playwright recovery flow verifies transaction load errors can be retried on desktop and mobile while navigation remains available
 - [x] Playwright partial-failure flow confirms dashboard analytics can fail independently while summary cards and navigation remain available at desktop and mobile widths
 - [x] Client production build enforces Vite-manifest gzip budgets for initial static JavaScript, lazy routes, shared/vendor chunks, visuals chunks, and CSS
