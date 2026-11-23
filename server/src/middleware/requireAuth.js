@@ -5,7 +5,7 @@ import { httpError } from '../utils/httpError.js';
 
 export function requireAuth({ db, secret, env, allowPendingDeletion = false }) {
   const auth = createAuthService({ db, secret });
-  return (req, _res, next) => {
+  const middleware = (req, _res, next) => {
     const token = req.cookies?.[authCookieName(env)];
     if (!token) return next(httpError(401, 'UNAUTHENTICATED', 'Please sign in to continue.'));
 
@@ -43,4 +43,6 @@ export function requireAuth({ db, secret, env, allowPendingDeletion = false }) {
     req.user = session.user;
     next();
   };
+  middleware.isRequireAuth = true;
+  return middleware;
 }

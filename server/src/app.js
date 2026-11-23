@@ -39,6 +39,11 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   const env = config ?? loadEnv();
   if (env.nodeEnv === 'production' && env.enableTestClock) throw new Error('ENABLE_TEST_CLOCK cannot be enabled in production.');
   const app = express();
+  app.locals.apiRouters = [];
+  const mountApiRouter = (prefix, router) => {
+    app.locals.apiRouters.push({ prefix, router });
+    app.use(prefix, router);
+  };
   app.disable('x-powered-by');
   if (env.trustProxy !== undefined) app.set('trust proxy', env.trustProxy);
   const gameEngine = createGamificationEngine({ db, logger, clock, enabled: env.gamificationEnabled !== false });
@@ -60,29 +65,29 @@ export function createApp({ db, config, logger, gamificationHandler, clock } = {
   app.use((req, res, next) => express.json({ limit: req.path.startsWith('/api/auth') ? '10kb' : '100kb' })(req, res, next));
   app.use(requestLogger(logger));
   app.locals.scheduler = null;
-  app.use('/api', createHealthRoutes(db, gameEngine, { env, getScheduler: () => app.locals.scheduler }));
-  app.use('/api/auth', createAuthRoutes({ db, env, rateLimits: env.authRateLimits, gameEngine }));
+  mountApiRouter('/api', createHealthRoutes(db, gameEngine, { env, getScheduler: () => app.locals.scheduler }));
+  mountApiRouter('/api/auth', createAuthRoutes({ db, env, rateLimits: env.authRateLimits, gameEngine }));
   const apiOptions = { db, env, logger, eventHandler: gamificationHandler, gameEngine };
-  app.use('/api/categories', createCategoryRoutes(apiOptions));
-  app.use('/api/transactions', createTransactionRoutes(apiOptions));
-  app.use('/api/budgets', createBudgetRoutes(apiOptions));
-  app.use('/api/dashboard', createDashboardRoutes(apiOptions));
-  app.use('/api/analytics', createAnalyticsRoutes(apiOptions));
-  app.use('/api/gamification', createGamificationRoutes(apiOptions));
-  app.use('/api/streaks', createStreakRoutes({ db, env, streakService }));
-  app.use('/api/integrity', createIntegrityRoutes({ db, env, clock: gameEngine.clock }));
-  app.use('/api/badges', createBadgeRoutes({ db, env, gameEngine }));
-  app.use('/api/missions', createMissionRoutes({ db, env, gameEngine }));
-  app.use('/api/shop', createShopRoutes({ db, env, gameEngine, streakService }));
-  app.use('/api/challenges', createChallengeRoutes({ db, env, gameEngine }));
-  app.use('/api/profile', createProfileRoutes({ db, env, gameEngine, streakService }));
-  app.use('/api/activity', createActivityRoutes({ db, env }));
-  app.use('/api/notifications', createNotificationPreferenceRoutes({ db, env, clock: gameEngine.clock }));
-  app.use('/api/celebrations', createCelebrationRoutes({ db, env, clock: gameEngine.clock }));
-  app.use('/api/ui/preferences', createUiPreferenceRoutes({ db, env, clock: gameEngine.clock }));
-  app.use('/api/account', createAccountRoutes({ db, env, clock: gameEngine.clock }));
+  mountApiRouter('/api/categories', createCategoryRoutes(apiOptions));
+  mountApiRouter('/api/transactions', createTransactionRoutes(apiOptions));
+  mountApiRouter('/api/budgets', createBudgetRoutes(apiOptions));
+  mountApiRouter('/api/dashboard', createDashboardRoutes(apiOptions));
+  mountApiRouter('/api/analytics', createAnalyticsRoutes(apiOptions));
+  mountApiRouter('/api/gamification', createGamificationRoutes(apiOptions));
+  mountApiRouter('/api/streaks', createStreakRoutes({ db, env, streakService }));
+  mountApiRouter('/api/integrity', createIntegrityRoutes({ db, env, clock: gameEngine.clock }));
+  mountApiRouter('/api/badges', createBadgeRoutes({ db, env, gameEngine }));
+  mountApiRouter('/api/missions', createMissionRoutes({ db, env, gameEngine }));
+  mountApiRouter('/api/shop', createShopRoutes({ db, env, gameEngine, streakService }));
+  mountApiRouter('/api/challenges', createChallengeRoutes({ db, env, gameEngine }));
+  mountApiRouter('/api/profile', createProfileRoutes({ db, env, gameEngine, streakService }));
+  mountApiRouter('/api/activity', createActivityRoutes({ db, env }));
+  mountApiRouter('/api/notifications', createNotificationPreferenceRoutes({ db, env, clock: gameEngine.clock }));
+  mountApiRouter('/api/celebrations', createCelebrationRoutes({ db, env, clock: gameEngine.clock }));
+  mountApiRouter('/api/ui/preferences', createUiPreferenceRoutes({ db, env, clock: gameEngine.clock }));
+  mountApiRouter('/api/account', createAccountRoutes({ db, env, clock: gameEngine.clock }));
   if (env.nodeEnv === 'test' && env.enableTestClock && clock?.set && clock?.advance) {
-    app.use('/api/test/clock', createTestClockRoutes(clock));
+    mountApiRouter('/api/test/clock', createTestClockRoutes(clock));
   }
   if (env.nodeEnv === 'production') {
     const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
