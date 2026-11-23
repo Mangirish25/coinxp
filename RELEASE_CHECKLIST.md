@@ -33,7 +33,9 @@ Completed Part 10 slices:
 - [x] Password change invalidates existing sessions with a per-user token version
 - [x] SEC-002 authorization sweep enumerates mounted routers and rejects unauthenticated access across all 65 private route/method cases
 - [x] SEC-003 pins the Node base image by digest and compiles native SQLite dependencies in a disposable builder stage (Docker build and readiness smoke passed on `2c7f0f5`)
-- [ ] Full celebration payload contract, instant path, cross-device exactly-once behavior
+- [x] Celebration preview and claim endpoints enforce a per-code presentation allowlist; integration tests inject financial fields across all configured celebration codes
+- [x] OFF and muted celebration preferences immediately demote notices to a static recap; deterministic plan tests cover the no-animation path
+- [ ] Exactly-once visual playback across browser crashes and acknowledgement failures (current cross-device lease prevents concurrent playback but permits replay after lease recovery)
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
 - [ ] UI state coverage for offline/partial failure at all screen sizes
 - [x] Storybook Motion Lab and visual regression baselines for the three dynamic visuals
