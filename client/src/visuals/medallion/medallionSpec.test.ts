@@ -17,4 +17,9 @@ describe('BAD-008 procedural medallion specification', () => {
     expect(medallionSpec({ slug: 'rare', category: 'TRACKING', tier: 1, rarity: 'EPIC', state: 'UNLOCKED', progressBps: 1000, size: 'xl', mode: 'REDUCED' })).toMatchObject({ motion: false, orbitCount: 0, sheen: false });
     expect(medallionSpec({ slug: 'rare', category: 'TRACKING', tier: 1, rarity: 'EPIC', state: 'UNLOCKED', progressBps: 1000, size: 'xl', quality: 'LOW' })).toMatchObject({ motion: false, orbitCount: 0, glow: 0 });
   });
+  it('BAD-009: adds rarity tilt only for full-motion high-quality medallions', () => {
+    expect(medallionSpec({ slug: 'rare', category: 'TRACKING', tier: 3, rarity: 'RARE', state: 'UNLOCKED', progressBps: 10000, size: 'xl' }).tilt).toBe(true);
+    expect(medallionSpec({ slug: 'rare', category: 'TRACKING', tier: 3, rarity: 'RARE', state: 'UNLOCKED', progressBps: 10000, size: 'xl', mode: 'REDUCED' }).tilt).toBe(false);
+    expect(medallionSpec({ slug: 'rare', category: 'TRACKING', tier: 3, rarity: 'RARE', state: 'UNLOCKED', progressBps: 10000, size: 'xl', quality: 'LOW' }).tilt).toBe(false);
+  });
 });

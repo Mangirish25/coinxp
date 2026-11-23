@@ -26,7 +26,8 @@ export function medallionSpec({ slug, category, tier, rarity, state, progressBps
     rarityColor: hidden ? '#94a3b8' : rarityColors[rarity],
     glow: effectEnabled ? effects.glow : 0,
     sheen: effectEnabled && effects.sheen, orbitCount: effectEnabled && effects.orbit ? qualityTiers[quality].orbit : 0,
-    rays: effectEnabled && effects.rays, motion: mode === 'FULL' && quality !== 'LOW' && size !== 'sm',
+    rays: effectEnabled && effects.rays, tilt: effectEnabled && effects.tilt,
+    motion: mode === 'FULL' && quality !== 'LOW' && size !== 'sm',
     locked, hidden, newTag: state === 'NEW', showcased: state === 'SHOWCASE',
   } as const;
 }

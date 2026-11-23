@@ -35,6 +35,10 @@ a {
 @keyframes flame-ember { from { opacity: 0; transform: translateY(8px); } 35% { opacity: .9; } to { opacity: 0; transform: translateY(-8px); } }
 .badge-medallion-motion .badge-orbit { transform-box: fill-box; transform-origin: center; animation: badge-orbit 8s linear infinite; }
 .badge-medallion-sheen { animation: badge-sheen 6s ease-in-out infinite; }
+.badge-medallion-tilt { transition: transform var(--dur-standard, 320ms) ease-out; transform-style: preserve-3d; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .badge-medallion-tilt:hover { transform: perspective(640px) rotateX(5deg) rotateY(-5deg); }
+}
 @keyframes badge-orbit { to { rotate: 360deg; } }
 @keyframes badge-sheen { 0%, 72%, 100% { filter: drop-shadow(0 0 0 transparent); } 84% { filter: drop-shadow(0 0 4px currentColor); } }
 @keyframes celebration-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -42,6 +46,8 @@ a {
   .streak-flame-svg, .streak-flame-animated, .streak-flame-risk, .streak-flame-settling,
   .streak-flame-halo, .streak-flame-rays, .streak-flame-ember, .badge-medallion-motion,
   .badge-medallion-sheen, .badge-orbit { animation: none !important; }
+  .badge-medallion-tilt { transition: none !important; }
+  .badge-medallion-tilt:hover { transform: none !important; }
   .celebration-enter { animation: none !important; }
 }
 

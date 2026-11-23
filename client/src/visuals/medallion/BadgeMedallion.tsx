@@ -27,7 +27,7 @@ export function BadgeMedallion({ badge, tier, size = 'md', state, progressBps = 
   const shape = spec.shape === 'flame' ? <path d={flameShape} /> : <polygon points={silhouettes[spec.shape] ?? silhouettes.squircle} />;
   const circumference = 289;
 
-  const artwork = <svg viewBox="0 0 100 100" width={spec.size} height={spec.size} role="img" aria-label={spec.accessibleLabel} className={`badge-medallion${spec.locked ? ' badge-medallion-locked' : ''}${spec.motion ? ' badge-medallion-motion' : ''}${spec.sheen ? ' badge-medallion-sheen' : ''}`}>
+  const artwork = <svg viewBox="0 0 100 100" width={spec.size} height={spec.size} role="img" aria-label={spec.accessibleLabel} className={`badge-medallion${spec.locked ? ' badge-medallion-locked' : ''}${spec.motion ? ' badge-medallion-motion' : ''}${spec.sheen ? ' badge-medallion-sheen' : ''}${spec.tilt ? ' badge-medallion-tilt' : ''}`}>
     <defs><linearGradient id={`${id}-metal`} x1="0" y1="0" x2="1" y2="1"><stop stopColor={spec.baseColor} /><stop offset=".5" stopColor="#fff" stopOpacity=".56" /><stop offset="1" stopColor={spec.rarityColor} /></linearGradient><radialGradient id={`${id}-glow`}><stop stopColor={spec.rarityColor} stopOpacity={spec.glow} /><stop offset="1" stopColor={spec.rarityColor} stopOpacity="0" /></radialGradient></defs>
     <circle cx="50" cy="50" r="49" fill={`url(#${id}-glow)`} />
     {spec.orbitCount > 0 && Array.from({ length: spec.orbitCount }, (_, index) => <circle key={index} className="badge-orbit" cx="50" cy="8" r="1.5" fill={spec.rarityColor} transform={`rotate(${index * (360 / spec.orbitCount)} 50 50)`} />)}

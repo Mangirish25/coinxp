@@ -3,7 +3,7 @@ import { MotionConfig } from 'motion/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { uiPreferencesApi } from '../services/uiPreferencesApi';
-import { adaptQuality, initialQualityFor, sampler, type QualityTier } from '../visuals/visuals.config';
+import { adaptQuality, initialQualityFor, motionTokens, sampler, type QualityTier } from '../visuals/visuals.config';
 import type { CelebrationPreference, UiPreferences, UserMotionMode } from '../types/uiPreferences';
 
 const storageKey = 'coinxp:ui-preferences:v1';
@@ -58,6 +58,12 @@ export function MotionProvider({ children }: { children: ReactNode }) {
   const preferences = preferencesQuery.data ?? local;
   const effectiveMode = preferences.motionMode === 'OFF' ? 'OFF' : preferences.motionMode === 'REDUCED' || (preferences.motionMode === 'SYSTEM' && prefersReduced) ? 'REDUCED' : 'FULL';
 
+  useEffect(() => {
+    for (const [name, duration] of Object.entries(motionTokens.duration)) {
+      document.documentElement.style.setProperty(`--dur-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, `${duration}ms`);
+    }
+    document.documentElement.style.setProperty('--ease-out', `cubic-bezier(${motionTokens.ease.out.join(', ')})`);
+  }, []);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return undefined;
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');

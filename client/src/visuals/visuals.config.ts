@@ -27,11 +27,11 @@ export const qualityTiers = {
 } as const;
 
 export const rarityEffects = {
-  COMMON: { sheen: false, glow: 0, orbit: false, rays: false, confetti: 0, revealMs: 600, fullScreen: false },
-  UNCOMMON: { sheen: true, glow: 0.3, orbit: false, rays: false, confetti: 0, revealMs: 1200, fullScreen: false },
-  RARE: { sheen: true, glow: 0.5, orbit: false, rays: false, confetti: 20, revealMs: 2000, fullScreen: true },
-  EPIC: { sheen: true, glow: 0.7, orbit: true, rays: false, confetti: 40, revealMs: 2800, fullScreen: true },
-  LEGENDARY: { sheen: true, glow: 1, orbit: true, rays: true, confetti: 60, revealMs: 3600, fullScreen: true },
+  COMMON: { sheen: false, glow: 0, orbit: false, rays: false, tilt: false, confetti: 0, revealMs: 600, fullScreen: false },
+  UNCOMMON: { sheen: true, glow: 0.3, orbit: false, rays: false, tilt: false, confetti: 0, revealMs: 1200, fullScreen: false },
+  RARE: { sheen: true, glow: 0.5, orbit: false, rays: false, tilt: true, confetti: 20, revealMs: 2000, fullScreen: true },
+  EPIC: { sheen: true, glow: 0.7, orbit: true, rays: false, tilt: true, confetti: 40, revealMs: 2800, fullScreen: true },
+  LEGENDARY: { sheen: true, glow: 1, orbit: true, rays: true, tilt: true, confetti: 60, revealMs: 3600, fullScreen: true },
 } as const;
 
 export const streakMilestoneIntensity = { 3: 'small', 7: 'small', 14: 'medium', 30: 'medium', 60: 'large', 100: 'large', 180: 'max', 365: 'max' } as const;
