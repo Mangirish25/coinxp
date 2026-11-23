@@ -1,5 +1,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import logger from 'node:console';
+import process from 'node:process';
+import { URL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 const assetDirectory = new URL('../dist/assets/', import.meta.url);
@@ -10,7 +13,7 @@ const budgets = new Map([
 ]);
 
 if (!statSync(directoryPath, { throwIfNoEntry: false })?.isDirectory()) {
-  console.error('Bundle budget check failed: client/dist/assets is missing.');
+  logger.error('Bundle budget check failed: client/dist/assets is missing.');
   process.exit(1);
 }
 
@@ -26,15 +29,15 @@ let exceeded = false;
 for (const asset of assets) {
   const extension = asset.name.slice(asset.name.lastIndexOf('.'));
   const budget = budgets.get(extension);
-  console.log(`${asset.name}: ${(asset.gzipBytes / 1024).toFixed(1)} KiB gzip / ${(budget / 1024).toFixed(0)} KiB budget`);
+  logger.log(`${asset.name}: ${(asset.gzipBytes / 1024).toFixed(1)} KiB gzip / ${(budget / 1024).toFixed(0)} KiB budget`);
   if (asset.gzipBytes > budget) {
     exceeded = true;
-    console.error(`Bundle budget exceeded: ${asset.name}`);
+    logger.error(`Bundle budget exceeded: ${asset.name}`);
   }
 }
 
 if (exceeded) process.exit(1);
 if (assets.length === 0) {
-  console.error('Bundle budget check failed: no JavaScript or CSS assets were found.');
+  logger.error('Bundle budget check failed: no JavaScript or CSS assets were found.');
   process.exit(1);
 }
