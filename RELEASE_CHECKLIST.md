@@ -14,6 +14,7 @@ Completed Part 10 slices:
 - [x] QA-002/004 Storybook Motion Lab includes flame, medallion and streak calendar controls, with the Accessibility addon enabled
 - [x] QA-003 deterministic desktop and mobile Chromium smoke flows cover protected-route restoration, login/logout, and responsive navigation
 - [x] QA-005 automated axe WCAG checks pass on login, registration, and deterministic flame, medallion, and streak calendar stories
+- [x] QA-006 deterministic flame, medallion, and full-year calendar screenshot baselines are captured and compared at desktop and mobile sizes
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
@@ -28,7 +29,7 @@ Completed Part 10 slices:
 - [ ] Full celebration payload contract, instant path, cross-device exactly-once behavior
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
 - [ ] UI state coverage for offline/partial failure at all screen sizes
-- [ ] Storybook Motion Lab and visual regression baselines
+- [x] Storybook Motion Lab and visual regression baselines for the three dynamic visuals
 - [ ] Playwright end-to-end flows and multi-browser smoke tests
 - [ ] axe, contrast matrix, screen-reader and flash-rate review
 - [ ] Lighthouse, frame-time, memory leak and final bundle-budget gates

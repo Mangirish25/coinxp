@@ -128,5 +128,10 @@ test('motion lab flame, medallion, and calendar stories pass automated WCAG chec
     await page.goto(`http://127.0.0.1:6006/iframe.html?id=${storyId}&viewMode=story`);
     await expect(page.locator('#storybook-root svg').first()).toBeVisible();
     await expectNoAccessibilityViolations(page, '#storybook-root');
+    await expect(page.locator('#storybook-root')).toHaveScreenshot(`${storyId}.png`, {
+      animations: 'disabled',
+      caret: 'hide',
+      scale: 'css',
+    });
   }
 });
