@@ -31,7 +31,7 @@ Completed Part 10 slices:
 - [x] Account deletion, 30-day grace, restore, hard-erasure integration check
 - [x] Password change invalidates existing sessions with a per-user token version
 - [x] SEC-002 authorization sweep enumerates mounted routers and rejects unauthenticated access across all 65 private route/method cases
-- [ ] SEC-003 pins the Node base image by digest and compiles native SQLite dependencies in a disposable builder stage (waiting for a successful full container build)
+- [x] SEC-003 pins the Node base image by digest and compiles native SQLite dependencies in a disposable builder stage (full GitHub Actions container build passed on `93788ec`)
 - [ ] Full celebration payload contract, instant path, cross-device exactly-once behavior
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
 - [ ] UI state coverage for offline/partial failure at all screen sizes
