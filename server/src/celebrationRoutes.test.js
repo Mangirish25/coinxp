@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from './app.js';
 import { createDatabase } from './db/connection.js';
 import { migrateDatabase } from './db/migrator.js';
+import { CELEBRATION_CONFIG } from './config/celebrationConfig.js';
 
 const secret = 'test-only-secret-with-at-least-thirty-two-characters';
 
@@ -45,5 +46,41 @@ describe('NOT-005 celebration notice routes', () => {
     const strangerCookie = stranger.headers['set-cookie'][0].split(';')[0];
     const otherUser = await request(app).post('/api/celebrations/claim').set('Cookie', strangerCookie).send({}).expect(200);
     expect(otherUser.body.data).toEqual([]);
+  });
+
+  it('returns only the allowlisted presentation contract for every celebration code', async () => {
+    const payload = {
+      fromLevel: 1, toLevel: 2, titleBefore: 'Beginner', titleAfter: 'Explorer', titleChanged: true,
+      lifetimeXp: 60, progressBps: 250, date: '2026-11-23', xpDelta: 10,
+      entries: [{ ruleId: 'XP-001', delta: 10, reasonCode: 'FIRST_STEP', amountPaise: 9000 }],
+      streakBefore: 1, streakAfter: 2, streakStatus: 'ACTIVE', runId: 12,
+      milestone: 7, length: 7, xp: 20, inventoryAfter: 1, lengthAtEnd: 6,
+      comebackEligibleUntil: '2026-11-30', fromLength: 2, toLength: 7,
+      slug: 'first_step', tier: 1, rarity: 'COMMON', category: 'tracking', hidden: false,
+      achievedOn: '2026-11-23', coalesced: [{ slug: 'spender', tier: 2, rarity: 'RARE', amount: 999 }],
+      missionId: 3, templateId: 'MIS_DAILY_REVIEW', slot: 'DAILY', periodKey: '2026-11-23', xpAwarded: 15,
+      challengeSlug: 'first-week', status: 'COMPLETED', qualifyingDays: 7, requiredDays: 7,
+      id: 4, itemSlug: 'forest-theme', type: 'COSMETIC', itemType: 'COSMETIC', costXp: 50,
+      spendableXp: 100, level: 2, amount: '₹90.00', amountPaise: 9000,
+      transactionId: 55, description: 'Financial detail must not appear in a celebration.',
+    };
+    for (const [index, code] of CELEBRATION_CONFIG.codes.entries()) {
+      db.prepare(`INSERT INTO user_notices(user_id,kind,code,data_json,dedupe_key,created_at)
+        VALUES(1,'PROGRESS',?,?,?,?)`).run(code, JSON.stringify(payload), `contract:${index}`, `2026-11-18T12:00:${String(index).padStart(2, '0')}.000Z`);
+    }
+
+    const preview = await request(app).get('/api/celebrations/pending').set('Cookie', cookie).expect(200);
+    expect(JSON.stringify(preview.body.data)).not.toMatch(/amountPaise|transactionId|description|₹90\.00/);
+    const { body } = await request(app).post('/api/celebrations/claim').set('Cookie', cookie).send({}).expect(200);
+    expect(body.data).toHaveLength(CELEBRATION_CONFIG.codes.length + 1);
+    const levelUp = body.data.find(({ code }) => code === 'LEVEL_UP');
+    expect(levelUp.data).toMatchObject({ fromLevel: 1, toLevel: 2, titleAfter: 'Explorer', progressBps: 250 });
+    const recap = body.data.find(({ code }) => code === 'DAY_RECAP');
+    expect(recap.data.entries).toEqual([{ ruleId: 'XP-001', delta: 10, reasonCode: 'FIRST_STEP' }]);
+    const badge = body.data.find(({ code, data }) => code === 'BADGE_UNLOCKED' && data.coalesced);
+    expect(badge.data.coalesced).toEqual([{ slug: 'spender', tier: 2, rarity: 'RARE' }]);
+    const purchase = body.data.find(({ code }) => code === 'PURCHASE_COMPLETED');
+    expect(purchase.data.costXp).toBe(50);
+    expect(JSON.stringify(body.data)).not.toMatch(/amountPaise|transactionId|description|₹90\.00/);
   });
 });

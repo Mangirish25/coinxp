@@ -3,6 +3,7 @@ import { createIntegrityRepository } from '../repositories/integrityRepository.j
 import { httpError } from '../utils/httpError.js';
 import { integrityMessageForCode } from '../gamification/messages.js';
 import { CELEBRATION_CONFIG } from '../config/celebrationConfig.js';
+import { sanitizeCelebrationPayload } from './celebrationPayload.js';
 
 export function createIntegrityService({ db, clock = { now: () => new Date() } }) {
   const repository = createIntegrityRepository(db);
@@ -18,14 +19,15 @@ export function createIntegrityService({ db, clock = { now: () => new Date() } }
     pendingCelebrations(userId) {
       const result = repository.listNotices(userId, { page: 1, pageSize: 100, unreadOnly: true });
       const codes = new Set(CELEBRATION_CONFIG.codes);
-      return { data: result.data.filter(({ code }) => codes.has(code)) };
+      return { data: result.data.filter(({ code }) => codes.has(code))
+        .map(({ dataJson: _dataJson, ...notice }) => ({ ...notice, data: sanitizeCelebrationPayload(notice.code, notice.data) })) };
     },
     claimCelebrations(userId) {
       const instant = now();
       const rows = repository.claimCelebrations(userId, instant.toISOString(),
         new Date(instant.getTime() + CELEBRATION_CONFIG.claimLeaseMs).toISOString(),
         CELEBRATION_CONFIG.claimBatchSize, CELEBRATION_CONFIG.codes);
-      return { data: rows };
+      return { data: rows.map(({ dataJson: _dataJson, ...notice }) => ({ ...notice, data: sanitizeCelebrationPayload(notice.code, notice.data) })) };
     },
     acknowledge(userId, upToId) { repository.acknowledgeThrough(userId, upToId, now().toISOString()); return { acknowledgedThrough: upToId }; },
     status(userId) {
