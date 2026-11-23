@@ -19,7 +19,7 @@ Completed Part 10 slices:
 - [x] QA-008 repeating CSS and dynamic flame cycles have an automated minimum-duration guard against motion above three cycles per second
 - [x] Playwright recovery flow verifies transaction load errors can be retried on desktop and mobile while navigation remains available
 - [x] Playwright partial-failure flow confirms dashboard analytics can fail independently while summary cards and navigation remain available at desktop and mobile widths
-- [x] Client production build enforces per-asset gzip budgets for JavaScript and CSS
+- [x] Client production build enforces Vite-manifest gzip budgets for initial static JavaScript, lazy routes, shared/vendor chunks, visuals chunks, and CSS
 - [x] QA-012 GitHub CI runs the production container through migrations and `/api/ready` before cleanup
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
@@ -41,7 +41,7 @@ Completed Part 10 slices:
 - [x] Storybook Motion Lab and visual regression baselines for the three dynamic visuals
 - [x] Playwright end-to-end flows and multi-browser smoke tests (desktop/mobile Chromium, desktop Firefox, mobile WebKit in CI)
 - [ ] axe, contrast matrix, screen-reader and flash-rate review
-- [ ] Lighthouse, frame-time, memory leak and final bundle-budget gates
+- [ ] Lighthouse, runtime frame-time and memory leak release gates
 - [ ] Nightly encrypted off-host backup, retention, restore check, and rehearsed recovery
 - [ ] CI supply-chain, secret, and container vulnerability scans
 - [ ] Deployment on the chosen host, migration rehearsal, monitoring and disclosure contact
