@@ -20,6 +20,7 @@ Completed Part 10 slices:
 - [x] Playwright recovery flow verifies transaction load errors can be retried on desktop and mobile while navigation remains available
 - [x] Playwright partial-failure flow confirms dashboard analytics can fail independently while summary cards and navigation remain available at desktop and mobile widths
 - [x] Client production build enforces per-asset gzip budgets for JavaScript and CSS
+- [x] QA-012 GitHub CI runs the production container through migrations and `/api/ready` before cleanup
 - [x] Badge gallery search/category/earned filters and keyboard controls for showcase ordering
 - [x] Rare and higher badge medallions add restrained hover tilt; detail cards flip between artwork and tier data with reduced-motion support
 - [x] Account deletion grace boundary and cross-table erasure are covered by integration tests
@@ -31,7 +32,7 @@ Completed Part 10 slices:
 - [x] Account deletion, 30-day grace, restore, hard-erasure integration check
 - [x] Password change invalidates existing sessions with a per-user token version
 - [x] SEC-002 authorization sweep enumerates mounted routers and rejects unauthenticated access across all 65 private route/method cases
-- [x] SEC-003 pins the Node base image by digest and compiles native SQLite dependencies in a disposable builder stage (full GitHub Actions container build passed on `93788ec`)
+- [x] SEC-003 pins the Node base image by digest and compiles native SQLite dependencies in a disposable builder stage (Docker build and readiness smoke passed on `2c7f0f5`)
 - [ ] Full celebration payload contract, instant path, cross-device exactly-once behavior
 - [ ] XP chips, level-up choreography, complete badge rarity reveal and streak heatmap
 - [ ] UI state coverage for offline/partial failure at all screen sizes
