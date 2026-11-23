@@ -2,7 +2,7 @@ import { Award, Flame, Heart, LockKeyhole, ShieldCheck, Star, Target } from 'luc
 import { useId } from 'react';
 import type { BadgeFamily, BadgeTier } from '../../types/rewards';
 import { medallionSpec, type MedallionSize, type MedallionState } from './medallionSpec';
-import { useMotionPreferences } from '../../motion/MotionProvider';
+import { useMotionActivity, useMotionPreferences } from '../../motion/MotionProvider';
 
 const categoryGlyphs = { TRACKING: Award, STREAK: Flame, BUDGET: ShieldCheck, PROGRESS: Star, CHALLENGE: Target, HABIT: Heart } as const;
 const silhouettes: Record<string, string> = {
@@ -22,6 +22,7 @@ export function BadgeMedallion({ badge, tier, size = 'md', state, progressBps = 
   const reactId = useId().replaceAll(':', '');
   const visualState = state ?? (tier.status === 'ACTIVE' ? 'UNLOCKED' : 'LOCKED');
   const spec = medallionSpec({ slug: badge.slug, category: badge.category, tier: tier.tier, rarity: tier.rarity as 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY', state: visualState, progressBps, size, quality: quality ?? motion.quality, mode: mode ?? motion.effectiveMode });
+  const activityRef = useMotionActivity<HTMLSpanElement>(spec.sheen || spec.orbitCount > 0);
   const Glyph = categoryGlyphs[badge.category as keyof typeof categoryGlyphs] ?? Award;
   const id = `medal-${reactId}`;
   const shape = spec.shape === 'flame' ? <path d={flameShape} /> : <polygon points={silhouettes[spec.shape] ?? silhouettes.squircle} />;
@@ -43,5 +44,5 @@ export function BadgeMedallion({ badge, tier, size = 'md', state, progressBps = 
     {spec.showcased && <Star x="76" y="5" width="18" height="18" fill="#fff" color="#a16207" />}
   </svg>;
 
-  return onClick ? <button type="button" onClick={onClick} aria-label={`View ${spec.accessibleLabel}`} className="rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700">{artwork}</button> : artwork;
+  return <span ref={activityRef} className="inline-flex">{onClick ? <button type="button" onClick={onClick} aria-label={`View ${spec.accessibleLabel}`} className="rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700">{artwork}</button> : artwork}</span>;
 }

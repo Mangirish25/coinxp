@@ -43,7 +43,7 @@ function isTyping() {
 }
 
 export function CelebrationHost({ userId }: { userId: number | null }) {
-  const { preferences: uiPreferences, effectiveMode } = useMotionPreferences();
+  const { preferences: uiPreferences, effectiveMode, registerVisualActivity } = useMotionPreferences();
   const seen = useRef(new Set<number>());
   const dialog = useRef<HTMLDivElement>(null);
   const skipButton = useRef<HTMLButtonElement>(null);
@@ -116,6 +116,11 @@ export function CelebrationHost({ userId }: { userId: number | null }) {
     const durationTimer = window.setTimeout(advance, displayed.durationMs);
     return () => { window.clearTimeout(skipTimer); window.clearTimeout(durationTimer); };
   }, [displayed, suspended, index, showRecap]);
+
+  useEffect(() => {
+    if (!displayed?.fullScreen || suspended || effectiveMode !== 'FULL') return undefined;
+    return registerVisualActivity();
+  }, [displayed, suspended, effectiveMode, registerVisualActivity]);
 
   useEffect(() => {
     if (!displayed || suspended) return;

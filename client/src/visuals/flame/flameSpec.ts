@@ -29,7 +29,7 @@ export function flameSpec({ length, state, quality = 'HIGH', mode = 'FULL' }: {
     band: band?.name ?? 'inactive', scale: state === 'AT_RISK' ? 0.9 : band?.scale ?? 0.55,
     layers: state === 'INACTIVE' || state === 'BROKEN' ? 1 : band?.layers ?? 1,
     flickerMs: band?.flickerMs ?? 0, embers: mode === 'FULL' && !['INACTIVE', 'FROZEN', 'BROKEN'].includes(state) ? count : 0,
-    halo: Boolean(band?.halo && state !== 'FROZEN' && state !== 'BROKEN'), rays: Boolean(band?.rays && state !== 'FROZEN' && state !== 'BROKEN'),
+    halo: Boolean(ambient && band?.halo), rays: Boolean(ambient && band?.rays),
     overlay, colors: palette, opacity: state === 'AT_RISK' ? 0.7 : 1,
     saturation: state === 'AT_RISK' ? 0.45 : state === 'BROKEN' ? 0 : 1,
     coreBoost: state === 'ACTIVE_TRACKED' ? 1.18 : 1,

@@ -28,7 +28,7 @@ describe('STR-011 and MOT-002 flame state visuals', () => {
   });
   it('scales ember counts by quality and seeds particle positions deterministically', () => {
     expect(flameSpec({ length: 30, state: 'ACTIVE_TRACKED', quality: 'MEDIUM' }).embers).toBe(5);
-    expect(flameSpec({ length: 30, state: 'ACTIVE_TRACKED', quality: 'LOW' }).embers).toBe(0);
+    expect(flameSpec({ length: 365, state: 'ACTIVE_TRACKED', quality: 'LOW' })).toMatchObject({ embers: 0, halo: false, rays: false, animate: false });
     expect(seededOffsets(42, 5)).toEqual(seededOffsets(42, 5));
     expect(seededOffsets(42, 5)).not.toEqual(seededOffsets(43, 5));
   });
